@@ -113,10 +113,10 @@ fi
 # ================================================================================
 
 echo "NOTE: [services] starting litellm"
-systemctl start litellm
+systemctl restart litellm
 
 echo "NOTE: [services] starting openclaw-gateway"
-systemctl start openclaw-gateway
+systemctl restart openclaw-gateway
 
 # First-boot only: configure openclaw model provider after gateway stamps config
 FIRST_BOOT_FLAG="/etc/openclaw-configured"
