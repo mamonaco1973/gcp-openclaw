@@ -5,3 +5,5 @@
 *.terraform.*
 *.pem
 *.pub
+credentials.json
+
