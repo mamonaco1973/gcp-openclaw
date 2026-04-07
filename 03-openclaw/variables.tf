@@ -22,7 +22,7 @@ variable "subnet_name" {
 variable "machine_type" {
   description = "GCE machine type for the OpenClaw host"
   type        = string
-  default     = "n2-standard-4"
+  default     = "e2-standard-4"
 }
 
 variable "zone" {

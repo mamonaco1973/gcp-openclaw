@@ -69,7 +69,7 @@ source "googlecompute" "openclaw" {
   source_image_family = "ubuntu-2404-lts-amd64"
   source_image_project_id = ["ubuntu-os-cloud"]
   ssh_username        = "ubuntu"
-  machine_type        = "n2-standard-4"
+  machine_type        = "e2-standard-4"
 
   image_name   = "openclaw-image-${local.timestamp}"
   image_family = "openclaw-images"
