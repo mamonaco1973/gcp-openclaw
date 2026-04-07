@@ -14,9 +14,9 @@ set -euo pipefail
 echo "NOTE: [litellm] creating venv at /opt/litellm-venv"
 python3 -m venv /opt/litellm-venv
 
-echo "NOTE: [litellm] installing litellm[proxy]"
+echo "NOTE: [litellm] installing litellm[proxy] and google cloud dependencies"
 /opt/litellm-venv/bin/pip install --upgrade pip --quiet
-/opt/litellm-venv/bin/pip install 'litellm[proxy]' --quiet
+/opt/litellm-venv/bin/pip install 'litellm[proxy]' 'litellm[google]' google-cloud-aiplatform --quiet
 echo "NOTE: [litellm] $(/opt/litellm-venv/bin/pip show litellm 2>/dev/null | grep Version)"
 
 echo "NOTE: [litellm] creating /opt/openclaw config directory"

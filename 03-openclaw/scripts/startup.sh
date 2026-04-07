@@ -37,13 +37,13 @@ model_list:
     litellm_params:
       model: vertex_ai/${primary_model}
       vertex_project: ${project_id}
-      vertex_location: us-east4
+      vertex_location: us-central1
 
   - model_name: gemini-pro
     litellm_params:
       model: vertex_ai/${secondary_model}
       vertex_project: ${project_id}
-      vertex_location: us-east4
+      vertex_location: us-central1
 
 general_settings:
   master_key: "sk-openclaw"
@@ -117,6 +117,33 @@ systemctl start litellm
 
 echo "NOTE: [services] starting openclaw-gateway"
 systemctl start openclaw-gateway
+
+# First-boot only: configure openclaw model provider after gateway stamps config
+FIRST_BOOT_FLAG="/etc/openclaw-configured"
+if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
+  echo "NOTE: [openclaw] first boot detected — configuring model provider"
+
+  # Wait for gateway to finish stamping its config
+  sleep 20
+
+  OPENCLAW_BIN=$(which openclaw)
+  sudo -u openclaw env HOME=/home/openclaw PATH="${PATH}" bash -c "
+    ${OPENCLAW_BIN} config set models.providers.litellm \
+      '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"gemini-flash\",\"name\":\"Gemini 2.5 Flash\",\"api\":\"openai-responses\"},{\"id\":\"gemini-pro\",\"name\":\"Gemini 2.5 Pro\",\"api\":\"openai-responses\"}]}' \
+      --strict-json
+    ${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-pro
+    ${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**'
+    ${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**'
+  "
+
+  echo "NOTE: [openclaw] restarting gateway to apply model config"
+  systemctl restart openclaw-gateway
+
+  touch "$${FIRST_BOOT_FLAG}"
+  echo "NOTE: [openclaw] first boot configuration complete"
+else
+  echo "NOTE: [openclaw] not first boot — skipping model config"
+fi
 
 echo "NOTE: [services] done"
 

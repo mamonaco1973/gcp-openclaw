@@ -24,15 +24,15 @@ cat > /opt/openclaw/litellm-config.yaml <<'LITELLM'
 model_list:
   - model_name: gemini-flash
     litellm_params:
-      model: vertex_ai/gemini-2.0-flash-001
+      model: vertex_ai/gemini-2.5-flash
       vertex_project: placeholder
-      vertex_location: us-east4
+      vertex_location: us-central1
 
   - model_name: gemini-pro
     litellm_params:
-      model: vertex_ai/gemini-2.0-pro-001
+      model: vertex_ai/gemini-2.5-pro
       vertex_project: placeholder
-      vertex_location: us-east4
+      vertex_location: us-central1
 
 general_settings:
   master_key: "sk-openclaw"
@@ -57,19 +57,15 @@ sudo -u openclaw env HOME=/home/openclaw PATH="${PATH}" bash -c "
 "
 sleep 12
 
-echo "NOTE: [openclaw-init] configuring litellm model provider"
+echo "NOTE: [openclaw-init] configuring gateway settings"
 sudo -u openclaw env HOME=/home/openclaw PATH="${PATH}" bash -c "
   ${OPENCLAW_BIN} config set gateway.mode local || true
   ${OPENCLAW_BIN} config set gateway.auth.mode none || true
-  ${OPENCLAW_BIN} config set models.providers.litellm \
-    '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"gemini-flash\",\"name\":\"Gemini 2.0 Flash\",\"api\":\"openai\"},{\"id\":\"gemini-pro\",\"name\":\"Gemini 2.0 Pro\",\"api\":\"openai\"}]}' \
-    --strict-json || true
-  ${OPENCLAW_BIN} models set litellm/gemini-pro || true
-  ${OPENCLAW_BIN} models set litellm/gemini-flash || true
-  ${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-flash || true
   ${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**' || true
   ${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**' || true
 "
+# Note: model provider config is set in startup.sh at first boot, after the
+# gateway has stamped its config — setting it here gets overwritten on restart.
 
 echo "NOTE: [openclaw-init] stopping all openclaw and litellm processes"
 pkill -u openclaw 2>/dev/null || true

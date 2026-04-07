@@ -50,11 +50,11 @@ variable "openclaw_image_name" {
 variable "primary_model" {
   description = "Vertex AI model ID for the primary model"
   type        = string
-  default     = "gemini-2.0-flash-001"
+  default     = "gemini-2.5-flash"
 }
 
 variable "secondary_model" {
   description = "Vertex AI model ID for the secondary model"
   type        = string
-  default     = "gemini-2.0-pro-001"
+  default     = "gemini-2.5-pro"
 }
