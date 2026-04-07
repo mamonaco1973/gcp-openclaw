@@ -4,34 +4,21 @@
 # ================================================================================
 #
 # Purpose:
-#   Orchestrate controlled teardown of core infrastructure.
+#   Orchestrate controlled teardown of the OpenClaw deployment.
 #
 # Teardown Order:
-#     1. Destroy OpenClaw EC2 host (03-openclaw).
-#     2. Deregister openclaw_ami and its EBS snapshot.
+#     1. Destroy OpenClaw VM (03-openclaw).
+#     2. Delete all openclaw GCE images.
 #     3. Destroy core infrastructure (01-core).
-#
-# Design Principles:
-#   - Fail-fast behavior for safe teardown.
-#
-# Requirements:
-#   - AWS CLI configured and authenticated.
-#   - Terraform installed and initialized per module.
-#
-# Exit Codes:
-#   0 = Success
-#   1 = Missing directories or Terraform/AWS CLI error
 #
 # ================================================================================
 
 set -euo pipefail
 
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
+project_id=$(jq -r '.project_id' "./credentials.json")
 
-# ================================================================================
-# SECTION: Configuration
-# ================================================================================
-
-export AWS_DEFAULT_REGION="us-east-1"
+gcloud auth activate-service-account --key-file="./credentials.json" > /dev/null 2>&1
 
 
 # ================================================================================
@@ -40,43 +27,42 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 echo "NOTE: Destroying OpenClaw host..."
 
-cd 03-openclaw || {
-  echo "ERROR: Directory 03-openclaw not found"
-  exit 1
-}
+openclaw_image=$(gcloud compute images list \
+  --filter="name~'^openclaw-image' AND family=openclaw-images" \
+  --sort-by="~creationTimestamp" \
+  --limit=1 \
+  --format="value(name)" 2>/dev/null || true)
 
+if [[ -z "${openclaw_image}" ]]; then
+  echo "NOTE: No openclaw image found, using placeholder for destroy."
+  openclaw_image="placeholder"
+fi
+
+cd 03-openclaw
 terraform init
-terraform destroy -auto-approve
+terraform destroy -auto-approve \
+  -var="openclaw_image_name=${openclaw_image}"
 cd ..
 
 
 # ================================================================================
-# PHASE 2: Deregister OpenClaw AMI
+# PHASE 2: Delete OpenClaw GCE Images
 # ================================================================================
 
-echo "NOTE: Deregistering all openclaw_ami AMIs..."
+echo "NOTE: Deleting all openclaw GCE images..."
 
-ami_ids=$(aws ec2 describe-images \
-  --owners self \
-  --filters "Name=name,Values=openclaw_ami*" \
-  --query "Images[*].ImageId" \
-  --output text 2>/dev/null || true)
+image_list=$(gcloud compute images list \
+  --format="value(name)" \
+  --filter="name~'^openclaw-image'" 2>/dev/null || true)
 
-if [ -n "${ami_ids}" ] && [ "${ami_ids}" != "None" ]; then
-  for ami_id in ${ami_ids}; do
-    snapshot_id=$(aws ec2 describe-images \
-      --image-ids "${ami_id}" \
-      --query "Images[0].BlockDeviceMappings[0].Ebs.SnapshotId" \
-      --output text)
-    aws ec2 deregister-image --image-id "${ami_id}"
-    echo "NOTE: Deregistered AMI ${ami_id}"
-    if [ -n "${snapshot_id}" ] && [ "${snapshot_id}" != "None" ]; then
-      aws ec2 delete-snapshot --snapshot-id "${snapshot_id}"
-      echo "NOTE: Deleted snapshot ${snapshot_id}"
-    fi
-  done
+if [ -z "${image_list}" ]; then
+  echo "NOTE: No openclaw images found, skipping."
 else
-  echo "NOTE: No openclaw_ami found, skipping"
+  for image in ${image_list}; do
+    echo "NOTE: Deleting image: ${image}"
+    gcloud compute images delete "${image}" --quiet \
+      || echo "WARNING: Failed to delete image: ${image}"
+  done
 fi
 
 
@@ -86,30 +72,9 @@ fi
 
 echo "NOTE: Destroying core infrastructure..."
 
-cd 01-core || {
-  echo "ERROR: Directory 01-core not found"
-  exit 1
-}
-
+cd 01-core
 terraform init
-
-SES_EMAIL=$(aws secretsmanager get-secret-value \
-  --secret-id openclaw_ses_smtp \
-  --query SecretString \
-  --output text 2>/dev/null | jq -r '.from_email // empty' 2>/dev/null || true)
-
-if [ -n "${SES_EMAIL}" ]; then
-  echo "NOTE: Using existing SES email: ${SES_EMAIL}"
-  terraform destroy -auto-approve -var="ses_email=${SES_EMAIL}"
-else
-  terraform destroy -auto-approve
-fi
-
+terraform destroy -auto-approve
 cd ..
-
-
-# ================================================================================
-# SECTION: Completion
-# ================================================================================
 
 echo "NOTE: Infrastructure teardown complete."

@@ -4,13 +4,12 @@
 #
 # Purpose:
 #   Generate a memorable password for the local openclaw Linux user and store
-#   it in AWS Secrets Manager. The EC2 instance reads this secret at first boot
-#   to create and configure the account.
+#   it in GCP Secret Manager. The VM reads this secret at first boot to set
+#   the account password.
 #
 # Design:
 #   - Password format: <word>-<6-digit-number>
 #   - No credentials exposed via Terraform outputs.
-#   - Secret permitted to be destroyed during teardown.
 #
 # ================================================================================
 
@@ -53,24 +52,28 @@ locals {
 
 
 # ================================================================================
-# SECTION: Secrets Manager
+# SECTION: Secret Manager
 # ================================================================================
 
-resource "aws_secretsmanager_secret" "openclaw" {
-  name                    = "openclaw_credentials"
-  description             = "Local openclaw desktop user credentials"
-  recovery_window_in_days = 0
+resource "google_secret_manager_secret" "openclaw_credentials" {
+  secret_id = "openclaw-credentials"
 
-  lifecycle {
-    prevent_destroy = false
+  replication {
+    auto {}
   }
 }
 
-resource "aws_secretsmanager_secret_version" "openclaw" {
-  secret_id = aws_secretsmanager_secret.openclaw.id
+resource "google_secret_manager_secret_version" "openclaw_credentials" {
+  secret = google_secret_manager_secret.openclaw_credentials.id
 
-  secret_string = jsonencode({
+  secret_data = jsonencode({
     username = "openclaw"
     password = local.openclaw_password
   })
+}
+
+resource "google_secret_manager_secret_iam_binding" "openclaw_credentials" {
+  secret_id = google_secret_manager_secret.openclaw_credentials.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  members   = ["serviceAccount:${local.service_account_email}"]
 }

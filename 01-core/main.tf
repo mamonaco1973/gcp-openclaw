@@ -3,14 +3,17 @@
 # ================================================================================
 #
 # Purpose:
-#   Configure the AWS provider for this Terraform root module.
-#
-# Design:
-#   - Region is explicitly pinned to ensure consistent deployments.
-#   - All resources in this configuration will be created in us-east-1.
+#   Configure the Google Cloud provider for this Terraform root module.
+#   Reads service account credentials from credentials.json in the project root.
 #
 # ================================================================================
 
-provider "aws" {
-  region = "us-east-1"
+provider "google" {
+  project     = local.credentials.project_id
+  credentials = file("../credentials.json")
+}
+
+locals {
+  credentials           = jsondecode(file("../credentials.json"))
+  service_account_email = local.credentials.client_email
 }

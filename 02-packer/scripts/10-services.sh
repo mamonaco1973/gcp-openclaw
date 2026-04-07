@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # Installs litellm.service and openclaw-gateway.service and enables them so
 # they start automatically at boot. Services are NOT started here — userdata.sh
-# writes the litellm config with the actual Bedrock model ID before starting.
+# writes the litellm config with the actual Vertex AI model ID before starting.
 #
 # ================================================================================
 

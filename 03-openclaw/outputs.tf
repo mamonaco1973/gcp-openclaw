@@ -1,14 +1,9 @@
-output "instance_id" {
-  description = "Instance ID for SSM Session Manager connection"
-  value       = aws_instance.openclaw.id
+output "instance_name" {
+  description = "GCE instance name"
+  value       = google_compute_instance.openclaw.name
 }
 
 output "public_ip" {
   description = "Public IP for direct RDP access (port 3389)"
-  value       = aws_instance.openclaw.public_ip
-}
-
-output "public_dns" {
-  description = "Public FQDN for direct RDP access (port 3389)"
-  value       = aws_instance.openclaw.public_dns
+  value       = google_compute_instance.openclaw.network_interface[0].access_config[0].nat_ip
 }

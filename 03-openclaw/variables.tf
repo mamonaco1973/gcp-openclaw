@@ -3,15 +3,15 @@
 # ================================================================================
 
 variable "vpc_name" {
-  description = "Name tag of the VPC created by 01-core"
+  description = "Name of the VPC created by 01-core"
   type        = string
-  default     = "clawd-vpc"
+  default     = "openclaw-vpc"
 }
 
 variable "subnet_name" {
-  description = "Name tag of the subnet to place the OpenClaw host in"
+  description = "Name of the subnet created by 01-core"
   type        = string
-  default     = "pub-subnet-1"
+  default     = "openclaw-subnet"
 }
 
 
@@ -19,32 +19,36 @@ variable "subnet_name" {
 # SECTION: Instance
 # ================================================================================
 
-variable "instance_type" {
-  description = "EC2 instance type for the OpenClaw host"
+variable "machine_type" {
+  description = "GCE machine type for the OpenClaw host"
   type        = string
-  default     = "t3.xlarge"
+  default     = "n2-standard-4"
 }
 
-variable "bedrock_model_id" {
-  description = "Bedrock Claude Sonnet model ID"
+variable "zone" {
+  description = "GCP zone for the OpenClaw host"
   type        = string
-  default     = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  default     = "us-central1-a"
 }
 
-variable "haiku_model_id" {
-  description = "Bedrock Claude Haiku model ID"
+variable "openclaw_image_name" {
+  description = "Name of the Packer-built openclaw GCP image (resolved by apply.sh)"
   type        = string
-  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
-variable "nova_pro_model_id" {
-  description = "Bedrock Amazon Nova Pro model ID"
+
+# ================================================================================
+# SECTION: AI Models (Vertex AI)
+# ================================================================================
+
+variable "primary_model" {
+  description = "Vertex AI model ID for the primary model"
   type        = string
-  default     = "us.amazon.nova-pro-v1:0"
+  default     = "gemini-2.0-flash-001"
 }
 
-variable "nova_lite_model_id" {
-  description = "Bedrock Amazon Nova Lite model ID"
+variable "secondary_model" {
+  description = "Vertex AI model ID for the secondary model"
   type        = string
-  default     = "us.amazon.nova-lite-v1:0"
+  default     = "gemini-2.0-pro-001"
 }

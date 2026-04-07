@@ -11,7 +11,7 @@ set -euo pipefail
 # pre-written config with defaults, discarding the litellm provider settings.
 #
 # Flow:
-#   1. Start litellm with a placeholder config so models auth can connect.
+#   1. Start litellm with a placeholder config so model auth can connect.
 #   2. Run openclaw gateway in background as openclaw user (stamps config).
 #   3. Configure the litellm model provider via CLI.
 #   4. Stop both processes — config is persisted at /home/openclaw/.openclaw.
@@ -22,25 +22,17 @@ echo "NOTE: [openclaw-init] writing placeholder litellm config"
 mkdir -p /opt/openclaw
 cat > /opt/openclaw/litellm-config.yaml <<'LITELLM'
 model_list:
-  - model_name: claude-sonnet
+  - model_name: gemini-flash
     litellm_params:
-      model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
-      aws_region_name: us-east-1
+      model: vertex_ai/gemini-2.0-flash-001
+      vertex_project: placeholder
+      vertex_location: us-central1
 
-  - model_name: claude-haiku
+  - model_name: gemini-pro
     litellm_params:
-      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
-      aws_region_name: us-east-1
-
-  - model_name: nova-pro
-    litellm_params:
-      model: bedrock/us.amazon.nova-pro-v1:0
-      aws_region_name: us-east-1
-
-  - model_name: nova-lite
-    litellm_params:
-      model: bedrock/us.amazon.nova-lite-v1:0
-      aws_region_name: us-east-1
+      model: vertex_ai/gemini-2.0-pro-001
+      vertex_project: placeholder
+      vertex_location: us-central1
 
 general_settings:
   master_key: "sk-openclaw"
@@ -70,24 +62,18 @@ sudo -u openclaw env HOME=/home/openclaw PATH="${PATH}" bash -c "
   ${OPENCLAW_BIN} config set gateway.mode local || true
   ${OPENCLAW_BIN} config set gateway.auth.mode none || true
   ${OPENCLAW_BIN} config set models.providers.litellm \
-    '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"claude-sonnet\",\"name\":\"Claude Sonnet (Bedrock)\"},{\"id\":\"claude-haiku\",\"name\":\"Claude Haiku (Bedrock)\"},{\"id\":\"nova-pro\",\"name\":\"Amazon Nova Pro (Bedrock)\"},{\"id\":\"nova-lite\",\"name\":\"Amazon Nova Lite (Bedrock)\"}]}' \
+    '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"gemini-flash\",\"name\":\"Gemini 2.0 Flash\",\"api\":\"openai\"},{\"id\":\"gemini-pro\",\"name\":\"Gemini 2.0 Pro\",\"api\":\"openai\"}]}' \
     --strict-json || true
-  ${OPENCLAW_BIN} models set litellm/nova-lite || true
-  ${OPENCLAW_BIN} models set litellm/nova-pro || true
-  ${OPENCLAW_BIN} models set litellm/claude-haiku || true
-  ${OPENCLAW_BIN} models set litellm/claude-sonnet || true
-  ${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/claude-sonnet || true
+  ${OPENCLAW_BIN} models set litellm/gemini-pro || true
+  ${OPENCLAW_BIN} models set litellm/gemini-flash || true
+  ${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-flash || true
   ${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**' || true
   ${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**' || true
 "
 
 echo "NOTE: [openclaw-init] stopping all openclaw and litellm processes"
-# Kill all processes running as the openclaw user — this catches the gateway,
-# any restarted child processes, node workers, and uvicorn/litellm children
-# that pkill -f misses.
 pkill -u openclaw 2>/dev/null || true
 sleep 3
-# Force-kill anything still alive
 pkill -9 -u openclaw 2>/dev/null || true
 rm -f /tmp/openclaw-init.pid
 
@@ -98,46 +84,25 @@ mkdir -p "${WORKSPACE}"
 cat > "${WORKSPACE}/HEARTBEAT.md" <<'HEARTBEAT'
 # System Context
 
-You are running on an AWS EC2 instance with the following capabilities:
+You are running on a GCP Compute Engine VM with the following capabilities:
 
 - **exec tool**: Full shell access — use it to run commands directly. Never ask the user to run commands manually.
-- **AWS CLI**: Pre-authenticated via instance IAM role. No credentials needed. Run aws commands directly via exec.
-- **Email**: Send email via `mail` command (msmtp + AWS SES SMTP): `echo "body" | mail -s "Subject" recipient@example.com`
-- **Cost Explorer**: Use `aws ce get-cost-and-usage` — the IAM role has Cost Explorer access.
+- **gcloud CLI**: Pre-authenticated via VM service account. No credentials needed. Run gcloud commands directly via exec.
+- **Email**: Send email via `mail` command (msmtp SMTP): `echo "body" | mail -s "Subject" recipient@example.com`
+- **Cost Report**: Run `gcp-cost-report` via exec to generate a GCP cost summary.
+- **Send Cost Report**: Run `send-cost-report <email>` via exec — generates an HTML cost report and emails it via msmtp.
 
 Read SYSTEM.md in this workspace for the full list of installed tools and capabilities.
 HEARTBEAT
 
-cat > "${WORKSPACE}/CLAUDE.md" <<'CLAUDE'
-You have full exec access via the exec tool. The AWS CLI is installed and
-pre-authenticated via the instance IAM role — no credentials needed. Use
-exec to run AWS CLI commands directly to complete any AWS task.
-
-To send email use the AWS CLI via exec:
-  aws ses send-email \
-    --from "you@example.com" \
-    --destination "ToAddresses=you@example.com" \
-    --message "Subject={Data=Subject},Body={Text={Data=Body}}" \
-    --region us-east-1
-
-The from address is in /etc/msmtprc — read it with: grep '^from' /etc/msmtprc | awk '{print $2}'
-
-Never tell the user to do something manually that you can do yourself via exec.
-CLAUDE
-
-echo "NOTE: [openclaw-init] writing SYSTEM.md to workspace"
 cat > "${WORKSPACE}/SYSTEM.md" <<'SYSTEM'
 # System Capabilities
 
 This instance has the following tools and capabilities available via exec.
 
 ## Email
-msmtp is configured system-wide with AWS SES SMTP credentials.
+msmtp is configured system-wide with SMTP credentials (injected at boot).
 Use the `mail` command to send email — no additional setup needed.
-
-**Important:** The IAM role does NOT have SES API permissions. Do not use
-`aws ses send-email` or boto3 SES calls — they will fail. Always use the
-`mail` command via msmtp, which uses pre-configured SMTP credentials.
 
 ```bash
 # Plain text
@@ -145,6 +110,12 @@ echo "Body here" | mail -s "Subject" recipient@example.com
 
 # With attachment
 echo "See attached." | mail -s "Subject" -A /path/to/file.docx recipient@example.com
+```
+
+## GCP Cost Reporting
+```bash
+gcp-cost-report              # Print cost summary to stdout
+send-cost-report user@example.com  # Email HTML cost report
 ```
 
 ## Document Processing
@@ -167,16 +138,16 @@ echo "See attached." | mail -s "Subject" -A /path/to/file.docx recipient@example
 - **httpx**, **requests** — Python HTTP
 
 ## Media
-- **imagemagick** — image manipulation (convert, resize, crop)
+- **imagemagick** — image manipulation
 - **ffmpeg** — video/audio processing
-- **poppler-utils** — PDF utilities (pdftotext, pdfinfo)
+- **poppler-utils** — PDF utilities
 - **ghostscript** — PDF manipulation
 
 ## Cloud
-- **AWS CLI** — configured via instance IAM role (no credentials needed)
-  - Bedrock, S3, Cost Explorer, Secrets Manager, SES
+- **gcloud** — pre-authenticated via VM service account (no credentials needed)
+  - Vertex AI, Secret Manager, Billing, Cloud Storage
+- **AWS CLI**, **az** — multi-cloud CLIs (require separate authentication)
 - **Terraform**, **Packer** — infrastructure tools
-- **gcloud**, **az** — Google Cloud and Azure CLIs
 
 ## File System
 - Workspace: `~/.openclaw/workspace` (also accessible as `~/Openclaw/workspace`)
@@ -187,7 +158,6 @@ echo "See attached." | mail -s "Subject" -A /path/to/file.docx recipient@example
 - **csvkit** — CSV tools
 - **xmlstarlet** — XML processing
 - **Rich** (Python) — formatted terminal output
-
 SYSTEM
 
 chown -R openclaw:openclaw "${WORKSPACE}"
@@ -203,7 +173,7 @@ if [ -f "${BOOTSTRAP}" ]; then
 
 Before you delete this file, read `SYSTEM.md` in this workspace — it lists
 the tools, commands, and capabilities available on this machine (email, document
-processing, AWS CLI, etc.). Keep that file around after onboarding.
+processing, gcloud CLI, etc.). Keep that file around after onboarding.
 EOF
 fi
 

@@ -3,20 +3,19 @@
 # ================================================================================
 #
 # Purpose:
-#   Build a self-contained AMI from Ubuntu 24.04 with:
+#   Build a self-contained GCE image from Ubuntu 24.04 with:
 #     - LXQt desktop + XRDP
 #     - Google Chrome
-#     - Cloud CLIs: AWS CLI v2, Azure CLI, Google Cloud SDK
+#     - Cloud CLIs: gcloud, AWS CLI v2, Azure CLI
 #     - Dev tools: Git, Terraform, Packer, VS Code
 #     - Node.js 22, pnpm, OpenClaw
 #     - LiteLLM proxy (Python venv)
 #     - systemd services for LiteLLM and OpenClaw gateway
 #
 # Design:
-#   - Base image: latest Canonical Ubuntu 24.04 (Noble) AMI.
-#   - Fully self-contained — no dependency on a pre-built base AMI.
-#   - Output AMI tagged "openclaw_ami" for use by 03-openclaw Terraform.
-#   - Builder uses pub-subnet-1 (public subnet) for SSH access during build.
+#   - Base image: latest Canonical Ubuntu 24.04 from ubuntu-os-cloud.
+#   - Fully self-contained — no dependency on a pre-built base image.
+#   - Output image tagged in family "openclaw-images" for use by 03-openclaw.
 #
 # ================================================================================
 
@@ -27,27 +26,20 @@
 
 packer {
   required_plugins {
-    amazon = {
-      source  = "github.com/hashicorp/amazon"
-      version = "~> 1"
+    googlecompute = {
+      source  = "github.com/hashicorp/googlecompute"
+      version = "~> 1.1.6"
     }
   }
 }
 
 
 # ================================================================================
-# SECTION: Base Ubuntu 24.04 AMI Lookup
+# SECTION: Locals
 # ================================================================================
 
-data "amazon-ami" "ubuntu_2404" {
-  filters = {
-    name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
-    virtualization-type = "hvm"
-    root-device-type    = "ebs"
-  }
-
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
+locals {
+  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
 
 
@@ -55,58 +47,33 @@ data "amazon-ami" "ubuntu_2404" {
 # SECTION: Build-Time Variables
 # ================================================================================
 
-variable "region" {
-  default = "us-east-1"
+variable "project_id" {
+  description = "GCP project ID that will own the image"
+  type        = string
 }
 
-variable "instance_type" {
-  default = "m5.xlarge"
-}
-
-variable "vpc_id" {
-  description = "VPC ID (clawd-vpc) resolved by apply.sh from 01-core outputs"
-  default     = ""
-}
-
-variable "subnet_id" {
-  description = "Public subnet ID (pub-subnet-1) for SSH access during build"
-  default     = ""
+variable "zone" {
+  description = "GCP zone used for the temporary build VM"
+  type        = string
+  default     = "us-central1-a"
 }
 
 
 # ================================================================================
-# SECTION: Amazon-EBS Builder Source
+# SECTION: Google Compute Builder Source
 # ================================================================================
 
-source "amazon-ebs" "openclaw" {
-  region        = var.region
-  instance_type = var.instance_type
-  source_ami    = data.amazon-ami.ubuntu_2404.id
-  ssh_username  = "ubuntu"
-  ssh_interface = "public_ip"
-  vpc_id        = var.vpc_id
-  subnet_id     = var.subnet_id
+source "googlecompute" "openclaw" {
+  project_id          = var.project_id
+  zone                = var.zone
+  source_image_family = "ubuntu-2404-lts-amd64"
+  source_image_project_id = ["ubuntu-os-cloud"]
+  ssh_username        = "ubuntu"
+  machine_type        = "n2-standard-4"
 
-  # Timestamped name allows multiple versions to coexist.
-  # Terraform resolves the latest via "openclaw_ami*" filter.
-  ami_name = format(
-    "openclaw_ami_%s",
-    replace(timestamp(), ":", "-")
-  )
-
-  launch_block_device_mappings {
-    device_name           = "/dev/sda1"
-    volume_size           = 64
-    volume_type           = "gp3"
-    delete_on_termination = true
-  }
-
-  tags = {
-    Name = format(
-      "openclaw_ami_%s",
-      replace(timestamp(), ":", "-")
-    )
-  }
+  image_name   = "openclaw-image-${local.timestamp}"
+  image_family = "openclaw-images"
+  disk_size    = 64
 }
 
 
@@ -115,7 +82,7 @@ source "amazon-ebs" "openclaw" {
 # ================================================================================
 
 build {
-  sources = ["source.amazon-ebs.openclaw"]
+  sources = ["source.googlecompute.openclaw"]
 
   # Upload systemd service unit files and icon.
   provisioner "file" {
@@ -138,7 +105,7 @@ build {
     destination = "/tmp/xvfb.service"
   }
 
-  # Remove snap, install SSM agent DEB, install base packages.
+  # Remove snap, install base packages.
   provisioner "shell" {
     script          = "./scripts/01-packages.sh"
     execute_command = "sudo -E bash '{{.Path}}'"
@@ -162,7 +129,7 @@ build {
     execute_command = "sudo -E bash '{{.Path}}'"
   }
 
-  # Install cloud CLIs and dev tooling (git, AWS, HashiCorp, az, gcloud, VS Code).
+  # Install cloud CLIs and dev tooling.
   provisioner "shell" {
     script          = "./scripts/05-tools.sh"
     execute_command = "sudo -E bash '{{.Path}}'"
@@ -195,6 +162,12 @@ build {
   # Install OnlyOffice Desktop Editors.
   provisioner "shell" {
     script          = "./scripts/12-onlyoffice.sh"
+    execute_command = "sudo -E bash '{{.Path}}'"
+  }
+
+  # Install GCP cost report and send-cost-report helper scripts.
+  provisioner "shell" {
+    script          = "./scripts/13-gcp-tools.sh"
     execute_command = "sudo -E bash '{{.Path}}'"
   }
 
