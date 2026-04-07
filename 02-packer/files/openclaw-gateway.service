@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenClaw Gateway
+After=network-online.target litellm.service xvfb.service
+Wants=network-online.target
+Requires=litellm.service
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+Environment="HOME=/home/openclaw"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="DISPLAY=:99"
+ExecStart=/usr/local/bin/openclaw gateway run \
+  --bind loopback \
+  --port 18789 \
+  --auth none
+ExecStartPost=/bin/bash -c 'sleep 3 && /usr/local/bin/openclaw approvals allowlist add --agent "*" "/**" && /usr/local/bin/openclaw approvals allowlist add --agent "main" "/**"'
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
