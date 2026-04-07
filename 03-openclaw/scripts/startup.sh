@@ -22,7 +22,7 @@ secret=$(gcloud secrets versions access latest --secret="openclaw-credentials")
 OPENCLAW_PASSWORD=$(echo "$secret" | jq -r '.password')
 
 echo "NOTE: [credentials] setting openclaw user password"
-echo "openclaw:${OPENCLAW_PASSWORD}" | chpasswd
+echo "openclaw:$${OPENCLAW_PASSWORD}" | chpasswd
 echo "NOTE: [credentials] done"
 
 
@@ -76,11 +76,11 @@ tls_trust_file /etc/ssl/certs/ca-certificates.crt
 logfile        /var/log/msmtp.log
 
 account        smtp
-host           ${SMTP_HOST}
-port           ${SMTP_PORT}
-from           ${SMTP_FROM}
-user           ${SMTP_USERNAME}
-password       ${SMTP_PASSWORD}
+host           $${SMTP_HOST}
+port           $${SMTP_PORT}
+from           $${SMTP_FROM}
+user           $${SMTP_USERNAME}
+password       $${SMTP_PASSWORD}
 
 account default : smtp
 EOF
@@ -95,11 +95,11 @@ EOF
   mkdir -p /etc/systemd/system/openclaw-gateway.service.d
   cat > /etc/systemd/system/openclaw-gateway.service.d/smtp.conf <<EOF
 [Service]
-Environment="SMTP_HOST=${SMTP_HOST}"
-Environment="SMTP_PORT=${SMTP_PORT}"
-Environment="SMTP_USERNAME=${SMTP_USERNAME}"
-Environment="SMTP_PASSWORD=${SMTP_PASSWORD}"
-Environment="SMTP_FROM=${SMTP_FROM}"
+Environment="SMTP_HOST=$${SMTP_HOST}"
+Environment="SMTP_PORT=$${SMTP_PORT}"
+Environment="SMTP_USERNAME=$${SMTP_USERNAME}"
+Environment="SMTP_PASSWORD=$${SMTP_PASSWORD}"
+Environment="SMTP_FROM=$${SMTP_FROM}"
 EOF
   systemctl daemon-reload
   echo "NOTE: [smtp] done"
