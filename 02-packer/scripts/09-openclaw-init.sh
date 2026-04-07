@@ -26,13 +26,13 @@ model_list:
     litellm_params:
       model: vertex_ai/gemini-2.0-flash-001
       vertex_project: placeholder
-      vertex_location: us-central1
+      vertex_location: us-east4
 
   - model_name: gemini-pro
     litellm_params:
       model: vertex_ai/gemini-2.0-pro-001
       vertex_project: placeholder
-      vertex_location: us-central1
+      vertex_location: us-east4
 
 general_settings:
   master_key: "sk-openclaw"

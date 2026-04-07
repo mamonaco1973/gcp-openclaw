@@ -30,7 +30,7 @@ echo "NOTE: Running environment validation..."
 
 export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
 project_id=$(jq -r '.project_id' "./credentials.json")
-GCP_ZONE="${GCP_ZONE:-us-central1-b}"
+GCP_ZONE="${GCP_ZONE:-us-east4-b}"
 
 
 # ================================================================================

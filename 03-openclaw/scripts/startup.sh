@@ -37,13 +37,13 @@ model_list:
     litellm_params:
       model: vertex_ai/${primary_model}
       vertex_project: ${project_id}
-      vertex_location: us-central1
+      vertex_location: us-east4
 
   - model_name: gemini-pro
     litellm_params:
       model: vertex_ai/${secondary_model}
       vertex_project: ${project_id}
-      vertex_location: us-central1
+      vertex_location: us-east4
 
 general_settings:
   master_key: "sk-openclaw"

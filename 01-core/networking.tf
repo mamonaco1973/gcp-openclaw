@@ -5,7 +5,7 @@
 # Purpose:
 #   Define baseline networking for the OpenClaw environment:
 #     - Custom-mode VPC (no auto-created subnets)
-#     - Single subnet in us-central1
+#     - Single subnet in us-east4
 #     - Cloud Router + Cloud NAT for outbound internet access
 #
 # ================================================================================
@@ -27,7 +27,7 @@ resource "google_compute_network" "openclaw_vpc" {
 
 resource "google_compute_subnetwork" "openclaw_subnet" {
   name          = var.subnet_name
-  region        = "us-central1"
+  region        = "us-east4"
   network       = google_compute_network.openclaw_vpc.id
   ip_cidr_range = "10.0.0.0/24"
 }
@@ -40,7 +40,7 @@ resource "google_compute_subnetwork" "openclaw_subnet" {
 resource "google_compute_router" "openclaw_router" {
   name    = "openclaw-router"
   network = google_compute_network.openclaw_vpc.id
-  region  = "us-central1"
+  region  = "us-east4"
 }
 
 
