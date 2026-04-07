@@ -31,7 +31,7 @@ data "google_compute_network" "openclaw_vpc" {
 
 data "google_compute_subnetwork" "openclaw_subnet" {
   name   = var.subnet_name
-  region = "us-central1"
+  region = var.region
 }
 
 data "google_compute_image" "openclaw" {

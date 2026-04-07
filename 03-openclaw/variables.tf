@@ -25,6 +25,12 @@ variable "machine_type" {
   default     = "e2-standard-4"
 }
 
+variable "region" {
+  description = "GCP region for the OpenClaw host"
+  type        = string
+  default     = "us-east4"
+}
+
 variable "zone" {
   description = "GCP zone for the OpenClaw host"
   type        = string
