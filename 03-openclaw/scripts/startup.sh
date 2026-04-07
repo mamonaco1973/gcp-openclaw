@@ -127,13 +127,13 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
   sleep 20
 
   OPENCLAW_BIN=$(which openclaw)
-  sudo -u openclaw env HOME=/home/openclaw PATH="${PATH}" bash -c "
-    ${OPENCLAW_BIN} config set models.providers.litellm \
+  sudo -u openclaw env HOME=/home/openclaw PATH="$${PATH}" bash -c "
+    $${OPENCLAW_BIN} config set models.providers.litellm \
       '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"gemini-flash\",\"name\":\"Gemini 2.5 Flash\",\"api\":\"openai-responses\"},{\"id\":\"gemini-pro\",\"name\":\"Gemini 2.5 Pro\",\"api\":\"openai-responses\"}]}' \
       --strict-json
-    ${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-pro
-    ${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**'
-    ${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**'
+    $${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-pro
+    $${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**'
+    $${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**'
   "
 
   echo "NOTE: [openclaw] restarting gateway to apply model config"
