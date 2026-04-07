@@ -55,7 +55,7 @@ variable "project_id" {
 variable "zone" {
   description = "GCP zone used for the temporary build VM"
   type        = string
-  default     = "us-central1-a"
+  default     = "us-central1-b"
 }
 
 

@@ -28,7 +28,7 @@ variable "machine_type" {
 variable "zone" {
   description = "GCP zone for the OpenClaw host"
   type        = string
-  default     = "us-central1-a"
+  default     = "us-central1-b"
 }
 
 variable "openclaw_image_name" {

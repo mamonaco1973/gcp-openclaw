@@ -30,6 +30,7 @@ echo "NOTE: Running environment validation..."
 
 export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
 project_id=$(jq -r '.project_id' "./credentials.json")
+GCP_ZONE="${GCP_ZONE:-us-central1-b}"
 
 
 # ================================================================================
@@ -54,6 +55,7 @@ cd 02-packer
 packer init ./openclaw.pkr.hcl
 packer build \
   -var "project_id=${project_id}" \
+  -var "zone=${GCP_ZONE}" \
   ./openclaw.pkr.hcl
 cd ..
 
@@ -79,7 +81,8 @@ echo "NOTE: Deploying OpenClaw host..."
 cd 03-openclaw
 terraform init
 terraform apply -auto-approve \
-  -var="openclaw_image_name=${openclaw_image}"
+  -var="openclaw_image_name=${openclaw_image}" \
+  -var="zone=${GCP_ZONE}"
 cd ..
 
 
