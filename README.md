@@ -300,7 +300,7 @@ language instructions.
 
 Paste this prompt into OpenClaw:
 
-> Generate an infrastructure report.
+> Generate an infrastructure report in the chat.
 
 OpenClaw will run `gcp-infra-report` via exec and display the results in the
 conversation.
