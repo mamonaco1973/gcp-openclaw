@@ -23,114 +23,91 @@ set -euo pipefail
 
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 
-{
-  echo "GCP Infrastructure Snapshot — Project: ${PROJECT_ID}"
-  echo "Generated: $(date -u)"
+md_table() {
+  local header="$1"
+  local data="$2"
+  local cols="$3"  # pipe-separated column names
+
+  echo "## ${header}"
   echo ""
 
-  # ── Compute Instances ──────────────────────────────────────────────────────
-  echo "=== Compute Instances ==="
-  INSTANCES=$(gcloud compute instances list \
-    --format="table[no-heading](name,zone.basename(),machineType.basename(),status,networkInterfaces[0].accessConfigs[0].natIP.yesno(yes='public',no='internal'))" \
-    2>/dev/null || true)
-  if [ -n "${INSTANCES}" ]; then
-    printf "  %-30s %-15s %-18s %-10s %s\n" "NAME" "ZONE" "MACHINE TYPE" "STATUS" "ACCESS"
-    echo "${INSTANCES}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No instances found."
+  if [ -z "$data" ]; then
+    echo "_None found._"
+    echo ""
+    return
   fi
+
+  # Header row
+  echo "$cols" | awk -F'|' '{
+    for(i=1;i<=NF;i++) printf "| %s ", $i
+    print "|"
+  }'
+  # Separator row
+  echo "$cols" | awk -F'|' '{
+    for(i=1;i<=NF;i++) printf "| --- "
+    print "|"
+  }'
+  # Data rows
+  echo "$data" | while read -r line; do
+    echo "$line" | awk '{
+      n=split($0,a,"\t")
+      if(n<=1) n=split($0,a," +")
+      for(i=1;i<=n;i++) printf "| %s ", a[i]
+      print "|"
+    }'
+  done
   echo ""
-
-  # ── Disks ──────────────────────────────────────────────────────────────────
-  echo "=== Disks ==="
-  DISKS=$(gcloud compute disks list \
-    --format="table[no-heading](name,zone.basename(),sizeGb,type.basename(),status)" \
-    2>/dev/null || true)
-  if [ -n "${DISKS}" ]; then
-    printf "  %-40s %-15s %-8s %-15s %s\n" "NAME" "ZONE" "SIZE GB" "TYPE" "STATUS"
-    echo "${DISKS}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No disks found."
-  fi
-  echo ""
-
-  # ── Custom Images ──────────────────────────────────────────────────────────
-  echo "=== Custom Images ==="
-  IMAGES=$(gcloud compute images list --no-standard-images \
-    --format="table[no-heading](name,family,diskSizeGb,status,creationTimestamp.date('%Y-%m-%d'))" \
-    2>/dev/null || true)
-  if [ -n "${IMAGES}" ]; then
-    printf "  %-45s %-20s %-8s %-10s %s\n" "NAME" "FAMILY" "SIZE GB" "STATUS" "CREATED"
-    echo "${IMAGES}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No custom images found."
-  fi
-  echo ""
-
-  # ── Firewall Rules ─────────────────────────────────────────────────────────
-  echo "=== Firewall Rules ==="
-  FW=$(gcloud compute firewall-rules list \
-    --format="table[no-heading](name,direction,allowed[].map().firewall_rule().list():label=ALLOW,sourceRanges.list())" \
-    2>/dev/null || true)
-  if [ -n "${FW}" ]; then
-    echo "${FW}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No firewall rules found."
-  fi
-  echo ""
-
-  # ── Secret Manager ─────────────────────────────────────────────────────────
-  echo "=== Secrets ==="
-  SECRETS=$(gcloud secrets list \
-    --format="table[no-heading](name,createTime.date('%Y-%m-%d'),replication.automatic.yesno(yes='auto',no='manual'))" \
-    2>/dev/null || true)
-  if [ -n "${SECRETS}" ]; then
-    printf "  %-40s %-12s %s\n" "NAME" "CREATED" "REPLICATION"
-    echo "${SECRETS}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No secrets found."
-  fi
-  echo ""
-
-  # ── VPC / Subnets ──────────────────────────────────────────────────────────
-  echo "=== Networks ==="
-  NETWORKS=$(gcloud compute networks list \
-    --format="table[no-heading](name,autoCreateSubnetworks,subnetworks.len():label=SUBNETS)" \
-    2>/dev/null || true)
-  if [ -n "${NETWORKS}" ]; then
-    echo "${NETWORKS}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No networks found."
-  fi
-  echo ""
-
-  # ── Storage Buckets ────────────────────────────────────────────────────────
-  echo "=== Storage Buckets ==="
-  BUCKETS=$(gcloud storage buckets list \
-    --format="table[no-heading](name,location,storageClass)" \
-    2>/dev/null || true)
-  if [ -n "${BUCKETS}" ]; then
-    printf "  %-45s %-15s %s\n" "NAME" "LOCATION" "CLASS"
-    echo "${BUCKETS}" | while read -r line; do
-      printf "  %s\n" "${line}"
-    done
-  else
-    echo "  No storage buckets found."
-  fi
-
 }
+
+echo "# GCP Infrastructure Snapshot"
+echo ""
+echo "**Project:** ${PROJECT_ID}  "
+echo "**Generated:** $(date -u)"
+echo ""
+echo "---"
+echo ""
+
+md_table "Compute Instances" \
+  "$(gcloud compute instances list \
+    --format='value(name,zone.basename(),machineType.basename(),status,networkInterfaces[0].accessConfigs[0].natIP.yesno(yes=Public,no=Internal))' \
+    2>/dev/null || true)" \
+  "Name|Zone|Machine Type|Status|Access"
+
+md_table "Disks" \
+  "$(gcloud compute disks list \
+    --format='value(name,zone.basename(),sizeGb,type.basename(),status)' \
+    2>/dev/null || true)" \
+  "Name|Zone|Size (GB)|Type|Status"
+
+md_table "Custom Images" \
+  "$(gcloud compute images list --no-standard-images \
+    --format='value(name,family,diskSizeGb,status,creationTimestamp.date(%Y-%m-%d))' \
+    2>/dev/null || true)" \
+  "Name|Family|Size (GB)|Status|Created"
+
+md_table "Firewall Rules" \
+  "$(gcloud compute firewall-rules list \
+    --format='value(name,direction,allowed[].map().firewall_rule().list(),sourceRanges.list())' \
+    2>/dev/null || true)" \
+  "Name|Direction|Allowed|Source Ranges"
+
+md_table "Secrets" \
+  "$(gcloud secrets list \
+    --format='value(name,createTime.date(%Y-%m-%d))' \
+    2>/dev/null || true)" \
+  "Name|Created"
+
+md_table "Networks" \
+  "$(gcloud compute networks list \
+    --format='value(name,autoCreateSubnetworks,subnetworks.len())' \
+    2>/dev/null || true)" \
+  "Name|Auto Subnets|Subnet Count"
+
+md_table "Storage Buckets" \
+  "$(gcloud storage buckets list \
+    --format='value(name,location,storageClass)' \
+    2>/dev/null || true)" \
+  "Name|Location|Class"
 SCRIPT
 
 chmod 755 /usr/local/bin/gcp-infra-report
