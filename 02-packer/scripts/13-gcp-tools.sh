@@ -5,27 +5,28 @@ set -euo pipefail
 # GCP Helper Scripts
 # ================================================================================
 #
-# Installs gcp-cost-report and send-cost-report helper scripts.
+# Installs gcp-infra-report and send-infra-report helper scripts.
 # These are designed to be called by the OpenClaw agent via exec.
 #
-# gcp-cost-report   — queries GCP Billing API and prints a text cost summary
-# send-cost-report  — calls gcp-cost-report, formats HTML, emails via msmtp
+# gcp-infra-report   — queries GCP APIs and prints an infrastructure snapshot
+# send-infra-report  — calls gcp-infra-report, formats HTML, emails via msmtp
 #
 # ================================================================================
 
-CACHE_FILE="/tmp/gcp-cost-report.cache"
-CACHE_TTL=60
+CACHE_FILE="/tmp/gcp-infra-report.cache"
+CACHE_TTL=300
+
 
 # ================================================================================
-# gcp-cost-report
+# gcp-infra-report
 # ================================================================================
 
-cat > /usr/local/bin/gcp-cost-report <<'SCRIPT'
+cat > /usr/local/bin/gcp-infra-report <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 
-CACHE_FILE="/tmp/gcp-cost-report.cache"
-CACHE_TTL=60
+CACHE_FILE="/tmp/gcp-infra-report.cache"
+CACHE_TTL=300
 
 # Use cache if fresh
 if [ -f "$CACHE_FILE" ]; then
@@ -41,60 +42,135 @@ if [ -z "$PROJECT_ID" ]; then
   PROJECT_ID=$(gcloud config list --format='value(core.project)' 2>/dev/null)
 fi
 
-NOW=$(date -u +%Y-%m-%d)
-FIRST_OF_MONTH=$(date -u +%Y-%m-01)
-SEVEN_DAYS_AGO=$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d)
-
 {
-  echo "GCP Cost Report — Project: ${PROJECT_ID}"
+  echo "GCP Infrastructure Snapshot — Project: ${PROJECT_ID}"
   echo "Generated: $(date -u)"
   echo ""
 
-  # Month-to-date total
-  echo "=== Month-to-Date Total (${FIRST_OF_MONTH} to ${NOW}) ==="
-  gcloud billing accounts list --format="value(name)" 2>/dev/null | head -1 | while read -r BILLING_ACCOUNT; do
-    gcloud alpha billing projects describe "${PROJECT_ID}" \
-      --format="value(billingAccountName)" 2>/dev/null || true
-  done
-
-  # Use BigQuery billing export if available, otherwise fall back to skimmed data
-  # For projects with billing export to BigQuery:
-  # bq query --use_legacy_sql=false "SELECT SUM(cost) FROM \`project.dataset.table\`..."
-  # Fallback: gcloud billing intercept (approximate via resource usage)
-
-  echo ""
-  echo "NOTE: For detailed cost breakdown, enable Cloud Billing export to BigQuery."
-  echo "      Use: gcloud billing export ... or visit console.cloud.google.com/billing"
+  # ── Compute Instances ──────────────────────────────────────────────────────
+  echo "=== Compute Instances ==="
+  INSTANCES=$(gcloud compute instances list \
+    --format="table[no-heading](name,zone.basename(),machineType.basename(),status,networkInterfaces[0].accessConfigs[0].natIP.yesno(yes='public',no='internal'))" \
+    2>/dev/null || true)
+  if [ -n "${INSTANCES}" ]; then
+    printf "  %-30s %-15s %-18s %-10s %s\n" "NAME" "ZONE" "MACHINE TYPE" "STATUS" "ACCESS"
+    echo "${INSTANCES}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No instances found."
+  fi
   echo ""
 
-  # Services with active usage this month
-  echo "=== Active Services ==="
-  gcloud services list --enabled --format="value(config.name)" 2>/dev/null | grep -v "^$" | sort | while read -r svc; do
-    echo "  - $svc"
-  done
+  # ── Disks ──────────────────────────────────────────────────────────────────
+  echo "=== Disks ==="
+  DISKS=$(gcloud compute disks list \
+    --format="table[no-heading](name,zone.basename(),sizeGb,type.basename(),status)" \
+    2>/dev/null || true)
+  if [ -n "${DISKS}" ]; then
+    printf "  %-40s %-15s %-8s %-15s %s\n" "NAME" "ZONE" "SIZE GB" "TYPE" "STATUS"
+    echo "${DISKS}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No disks found."
+  fi
+  echo ""
+
+  # ── Custom Images ──────────────────────────────────────────────────────────
+  echo "=== Custom Images ==="
+  IMAGES=$(gcloud compute images list --no-standard-images \
+    --format="table[no-heading](name,family,diskSizeGb,status,creationTimestamp.date('%Y-%m-%d'))" \
+    2>/dev/null || true)
+  if [ -n "${IMAGES}" ]; then
+    printf "  %-45s %-20s %-8s %-10s %s\n" "NAME" "FAMILY" "SIZE GB" "STATUS" "CREATED"
+    echo "${IMAGES}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No custom images found."
+  fi
+  echo ""
+
+  # ── Firewall Rules ─────────────────────────────────────────────────────────
+  echo "=== Firewall Rules ==="
+  FW=$(gcloud compute firewall-rules list \
+    --format="table[no-heading](name,direction,allowed[].map().firewall_rule().list():label=ALLOW,sourceRanges.list())" \
+    2>/dev/null || true)
+  if [ -n "${FW}" ]; then
+    echo "${FW}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No firewall rules found."
+  fi
+  echo ""
+
+  # ── Secret Manager ─────────────────────────────────────────────────────────
+  echo "=== Secrets ==="
+  SECRETS=$(gcloud secrets list \
+    --format="table[no-heading](name,createTime.date('%Y-%m-%d'),replication.automatic.yesno(yes='auto',no='manual'))" \
+    2>/dev/null || true)
+  if [ -n "${SECRETS}" ]; then
+    printf "  %-40s %-12s %s\n" "NAME" "CREATED" "REPLICATION"
+    echo "${SECRETS}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No secrets found."
+  fi
+  echo ""
+
+  # ── VPC / Subnets ──────────────────────────────────────────────────────────
+  echo "=== Networks ==="
+  NETWORKS=$(gcloud compute networks list \
+    --format="table[no-heading](name,autoCreateSubnetworks,subnetworks.len():label=SUBNETS)" \
+    2>/dev/null || true)
+  if [ -n "${NETWORKS}" ]; then
+    echo "${NETWORKS}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No networks found."
+  fi
+  echo ""
+
+  # ── Storage Buckets ────────────────────────────────────────────────────────
+  echo "=== Storage Buckets ==="
+  BUCKETS=$(gcloud storage buckets list \
+    --format="table[no-heading](name,location,storageClass)" \
+    2>/dev/null || true)
+  if [ -n "${BUCKETS}" ]; then
+    printf "  %-45s %-15s %s\n" "NAME" "LOCATION" "CLASS"
+    echo "${BUCKETS}" | while read -r line; do
+      printf "  %s\n" "${line}"
+    done
+  else
+    echo "  No storage buckets found."
+  fi
 
 } | tee "$CACHE_FILE"
 SCRIPT
 
-chmod 755 /usr/local/bin/gcp-cost-report
+chmod 755 /usr/local/bin/gcp-infra-report
 
 
 # ================================================================================
-# send-cost-report
+# send-infra-report
 # ================================================================================
 
-cat > /usr/local/bin/send-cost-report <<'SCRIPT'
+cat > /usr/local/bin/send-infra-report <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: send-cost-report <email>"
+  echo "Usage: send-infra-report <email>"
   exit 1
 fi
 
 RECIPIENT="$1"
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-REPORT=$(gcp-cost-report)
+REPORT=$(gcp-infra-report)
 NOW=$(date -u)
 
 SMTP_FROM=$(grep '^from' /etc/msmtprc 2>/dev/null | awk '{print $2}' | head -1 || echo "openclaw@localhost")
@@ -106,14 +182,14 @@ HTML=$(cat <<EOF
 <meta charset="UTF-8">
 <style>
   body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
-  .container { max-width: 700px; margin: 0 auto; background: white; border-radius: 8px;
+  .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px;
                box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; }
   .header { background: #1a73e8; color: white; padding: 24px 32px; }
   .header h1 { margin: 0; font-size: 22px; }
   .header p { margin: 4px 0 0; opacity: 0.85; font-size: 14px; }
   .body { padding: 24px 32px; }
   pre { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px;
-        padding: 16px; font-size: 13px; white-space: pre-wrap; word-wrap: break-word; }
+        padding: 16px; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; }
   .footer { background: #f4f4f4; padding: 12px 32px; font-size: 12px; color: #888;
             border-top: 1px solid #e0e0e0; }
 </style>
@@ -121,7 +197,7 @@ HTML=$(cat <<EOF
 <body>
 <div class="container">
   <div class="header">
-    <h1>GCP Cost Report</h1>
+    <h1>GCP Infrastructure Snapshot</h1>
     <p>Project: ${PROJECT_ID} &nbsp;|&nbsp; Generated: ${NOW}</p>
   </div>
   <div class="body">
@@ -135,14 +211,14 @@ EOF
 )
 
 echo "$HTML" | mail \
-  -s "GCP Cost Report — ${PROJECT_ID} — $(date +%Y-%m-%d)" \
+  -s "GCP Infrastructure Snapshot — ${PROJECT_ID} — $(date +%Y-%m-%d)" \
   -a "From: ${SMTP_FROM}" \
   -a "Content-Type: text/html" \
   "$RECIPIENT"
 
-echo "NOTE: Cost report sent to ${RECIPIENT}"
+echo "NOTE: Infrastructure report sent to ${RECIPIENT}"
 SCRIPT
 
-chmod 755 /usr/local/bin/send-cost-report
+chmod 755 /usr/local/bin/send-infra-report
 
-echo "NOTE: [gcp-tools] gcp-cost-report and send-cost-report installed"
+echo "NOTE: [gcp-tools] gcp-infra-report and send-infra-report installed"

@@ -85,8 +85,8 @@ You are running on a GCP Compute Engine VM with the following capabilities:
 - **exec tool**: Full shell access — use it to run commands directly. Never ask the user to run commands manually.
 - **gcloud CLI**: Pre-authenticated via VM service account. No credentials needed. Run gcloud commands directly via exec.
 - **Email**: Send email via `mail` command (msmtp SMTP): `echo "body" | mail -s "Subject" recipient@example.com`
-- **Cost Report**: Run `gcp-cost-report` via exec to generate a GCP cost summary.
-- **Send Cost Report**: Run `send-cost-report <email>` via exec — generates an HTML cost report and emails it via msmtp.
+- **Infrastructure Report**: Run `gcp-infra-report` via exec to generate a GCP infrastructure snapshot.
+- **Send Infrastructure Report**: Run `send-infra-report <email>` via exec — generates an HTML infrastructure snapshot and emails it via msmtp.
 
 Read SYSTEM.md in this workspace for the full list of installed tools and capabilities.
 HEARTBEAT
@@ -108,10 +108,10 @@ echo "Body here" | mail -s "Subject" recipient@example.com
 echo "See attached." | mail -s "Subject" -A /path/to/file.docx recipient@example.com
 ```
 
-## GCP Cost Reporting
+## GCP Infrastructure Reporting
 ```bash
-gcp-cost-report              # Print cost summary to stdout
-send-cost-report user@example.com  # Email HTML cost report
+gcp-infra-report                       # Print infrastructure snapshot to stdout
+send-infra-report user@example.com     # Email HTML infrastructure snapshot
 ```
 
 ## Document Processing
