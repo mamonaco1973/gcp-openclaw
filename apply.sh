@@ -53,11 +53,11 @@ cd ..
 echo "NOTE: Building OpenClaw image with Packer..."
 
 cd 02-packer
-packer init ./openclaw.pkr.hcl
-packer build \
-  -var "project_id=${project_id}" \
-  -var "zone=${GCP_ZONE}" \
-  ./openclaw.pkr.hcl
+# packer init ./openclaw.pkr.hcl
+# packer build \
+#   -var "project_id=${project_id}" \
+#   -var "zone=${GCP_ZONE}" \
+#   ./openclaw.pkr.hcl
 cd ..
 
 
