@@ -173,8 +173,6 @@ PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 REPORT=$(gcp-infra-report)
 NOW=$(date -u)
 
-SMTP_FROM=$(grep '^from' /etc/msmtprc 2>/dev/null | awk '{print $2}' | head -1 || echo "openclaw@localhost")
-
 HTML=$(cat <<EOF
 <!DOCTYPE html>
 <html>
@@ -210,9 +208,8 @@ HTML=$(cat <<EOF
 EOF
 )
 
-echo "$HTML" | mail \
+echo "$HTML" | gcp-mail \
   -s "GCP Infrastructure Snapshot — ${PROJECT_ID} — $(date +%Y-%m-%d)" \
-  -a "From: ${SMTP_FROM}" \
   -a "Content-Type: text/html" \
   "$RECIPIENT"
 

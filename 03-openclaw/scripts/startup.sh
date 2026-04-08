@@ -88,6 +88,39 @@ EOF
   touch /var/log/msmtp.log
   chmod 666 /var/log/msmtp.log
 
+  # Write gcp-mail wrapper so callers never need to specify the from address
+  cat > /usr/local/bin/gcp-mail <<GCPMAIL
+#!/bin/bash
+# Send email via msmtp with the configured from address.
+# Usage: echo "Body" | gcp-mail -s "Subject" recipient@example.com
+#        gcp-mail -s "Subject" recipient@example.com "Body"
+SMTP_FROM="$${SMTP_FROM}"
+SUBJECT=""
+RECIPIENT=""
+BODY=""
+CONTENT_TYPE="text/plain"
+
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -s) SUBJECT="\$2"; shift 2 ;;
+    -a)
+      if [[ "\$2" == "Content-Type: text/html"* ]]; then CONTENT_TYPE="text/html"; fi
+      shift 2 ;;
+    *)
+      if [ -z "\$RECIPIENT" ]; then RECIPIENT="\$1"; else BODY="\$1"; fi
+      shift ;;
+  esac
+done
+
+if [ -z "\$BODY" ]; then BODY=\$(cat); fi
+
+printf "From: %s\nTo: %s\nSubject: %s\nContent-Type: %s\n\n%s\n" \
+  "\$SMTP_FROM" "\$RECIPIENT" "\$SUBJECT" "\$CONTENT_TYPE" "\$BODY" \
+  | msmtp "\$RECIPIENT"
+GCPMAIL
+  chmod 755 /usr/local/bin/gcp-mail
+  echo "NOTE: [smtp] gcp-mail wrapper written"
+
   cp /etc/msmtprc /home/openclaw/.msmtprc
   chown openclaw:openclaw /home/openclaw/.msmtprc
   chmod 600 /home/openclaw/.msmtprc

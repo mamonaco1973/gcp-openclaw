@@ -84,7 +84,7 @@ You are running on a GCP Compute Engine VM with the following capabilities:
 
 - **exec tool**: Full shell access — use it to run commands directly. Never ask the user to run commands manually.
 - **gcloud CLI**: Pre-authenticated via VM service account. No credentials needed. Run gcloud commands directly via exec.
-- **Email**: Send email via `mail` command (msmtp SMTP): `echo "body" | mail -s "Subject" recipient@example.com`
+- **Email**: Send email via `gcp-mail` (from address pre-configured): `echo "body" | gcp-mail -s "Subject" recipient@example.com`
 - **Infrastructure Report**: Run `gcp-infra-report` via exec to generate a GCP infrastructure snapshot.
 - **Send Infrastructure Report**: Run `send-infra-report <email>` via exec — generates an HTML infrastructure snapshot and emails it via msmtp.
 
@@ -98,14 +98,14 @@ This instance has the following tools and capabilities available via exec.
 
 ## Email
 msmtp is configured system-wide with SMTP credentials (injected at boot).
-Use the `mail` command to send email — no additional setup needed.
+Use the `gcp-mail` wrapper — from address is pre-configured, no extra flags needed.
 
 ```bash
 # Plain text
-echo "Body here" | mail -s "Subject" recipient@example.com
+echo "Body here" | gcp-mail -s "Subject" recipient@example.com
 
-# With attachment
-echo "See attached." | mail -s "Subject" -A /path/to/file.docx recipient@example.com
+# HTML
+echo "<h1>Hello</h1>" | gcp-mail -s "Subject" -a "Content-Type: text/html" recipient@example.com
 ```
 
 ## GCP Infrastructure Reporting
