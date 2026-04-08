@@ -57,6 +57,8 @@ notifications, and file attachments without any manual setup.
 
 ## Architecture
 
+![gcp-openclaw](gcp-openclaw.png)
+
 The deployment spans three Terraform phases backed by a Packer image build.
 **01-core** establishes the network foundation — a VPC, subnet, Cloud Router,
 NAT gateway, and Secret Manager secrets for credentials and SMTP. **02-packer**
@@ -116,23 +118,23 @@ Billing, and Storage APIs.
 
 ### SMTP Email (Optional)
 
-To enable outbound email from the agent, populate the `openclaw-smtp` secret
-in Secret Manager before deploying `03-openclaw`:
+To enable outbound email from the agent, set the SMTP variables in
+`01-core/variables.tf` before running `apply.sh`:
 
-```bash
-gcloud secrets versions add openclaw-smtp --data-file=- <<EOF
-{
-  "smtp_host": "smtp.example.com",
-  "smtp_port": "587",
-  "smtp_username": "user@example.com",
-  "smtp_password": "yourpassword",
-  "from_email": "user@example.com"
-}
-EOF
+```hcl
+variable "smtp_host"     { default = "smtp.example.com" }
+variable "smtp_port"     { default = "587" }
+variable "smtp_username" { default = "user@example.com" }
+variable "smtp_password" { default = "yourpassword" }
+variable "smtp_from"     { default = "user@example.com" }
 ```
 
-If the secret is missing or contains dummy values, SMTP is skipped silently and
-the VM still boots normally.
+Terraform writes these values into the `openclaw-smtp` Secret Manager secret
+during `01-core` deployment. The VM reads them at boot to configure msmtp and
+the `gcp-mail` wrapper.
+
+If the values are left at their defaults (`smtp.example.com`), SMTP is skipped
+silently and the VM still boots normally.
 
 ---
 
