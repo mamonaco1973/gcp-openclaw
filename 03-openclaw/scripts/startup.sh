@@ -159,6 +159,14 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
   # Wait for gateway to finish stamping its config
   sleep 20
 
+  echo "NOTE: [openclaw] stopping gateway to avoid config file lock"
+  systemctl stop openclaw-gateway
+
+  if [ -f /home/openclaw/.openclaw/openclaw.json.lock ]; then
+    echo "NOTE: [openclaw] removing stale config lock"
+    rm -f /home/openclaw/.openclaw/openclaw.json.lock
+  fi
+
   OPENCLAW_BIN=$(which openclaw)
   sudo -u openclaw env HOME=/home/openclaw PATH="$${PATH}" bash -c "
     $${OPENCLAW_BIN} config set models.providers.litellm \
@@ -170,7 +178,7 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
   "
 
   echo "NOTE: [openclaw] restarting gateway to apply model config"
-  systemctl restart openclaw-gateway
+  systemctl start openclaw-gateway
 
   touch "$${FIRST_BOOT_FLAG}"
   echo "NOTE: [openclaw] first boot configuration complete"
