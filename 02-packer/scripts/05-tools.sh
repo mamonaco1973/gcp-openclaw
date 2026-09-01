@@ -85,7 +85,12 @@ https://packages.cloud.google.com/apt cloud-sdk main" \
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
   | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
 apt-get update -y
-apt-get install -y google-cloud-sdk
+# Google renamed the package: the cloud-sdk apt repo now ships
+# google-cloud-cli and google-cloud-sdk was dropped outright rather than
+# left as a transitional package, so the old name fails the build with
+# 'has no installation candidate'.  The repo, key and .list name are
+# unchanged -- only the package is.
+apt-get install -y google-cloud-cli
 echo "NOTE: [tools] $(gcloud --version | head -1)"
 
 
