@@ -26,6 +26,13 @@ apt-get install -y \
   msmtp-mta \
   mailutils
 
+# httpx/anyio now require typing_extensions >= 4.16, but apt ships 4.10 with
+# no RECORD file, so pip aborts rather than uninstall it. Land a newer copy
+# in /usr/local first -- it precedes dist-packages on sys.path, so imports
+# resolve to it while apt's copy stays in place for Debian's own packages.
+echo "NOTE: [python-tools] pre-staging typing_extensions over the apt copy"
+pip3 install --break-system-packages --ignore-installed typing_extensions
+
 echo "NOTE: [python-tools] installing Python packages system-wide"
 pip3 install --break-system-packages \
   python-docx \
