@@ -172,9 +172,13 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
     models:  $models
   }')
 
+  # "$@" is deliberate and must NOT be written "$$@". templatefile only
+  # treats $$ as an escape when a { follows it, so $$@ survives into the
+  # rendered script and bash reads it as $$ (the PID) plus a literal @ --
+  # every call became `openclaw <pid>@` and failed.
   run_openclaw() {
     sudo -u openclaw env HOME=/home/openclaw PATH="$${PATH}" \
-      "$${OPENCLAW_BIN}" "$$@"
+      "$${OPENCLAW_BIN}" "$@"
   }
 
   if ! run_openclaw config set models.providers.litellm \

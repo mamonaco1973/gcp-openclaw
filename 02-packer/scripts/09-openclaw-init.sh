@@ -86,6 +86,7 @@ You are running on a GCP Compute Engine VM with the following capabilities:
 - **Email**: Send email via `gcp-mail` (from address pre-configured): `echo "body" | gcp-mail -s "Subject" recipient@example.com`
 - **Infrastructure Report**: Run `gcp-infra-report` via exec to generate a GCP infrastructure snapshot.
 - **Send Infrastructure Report**: Run `send-infra-report <email>` via exec — generates an HTML infrastructure snapshot and emails it via msmtp.
+- **Web**: Apache2 serves /var/www/html (world-writable) at http://localhost/ — write a file there and open it in the browser.
 
 Read SYSTEM.md in this workspace for the full list of installed tools and capabilities.
 HEARTBEAT
@@ -112,6 +113,21 @@ echo "<h1>Hello</h1>" | gcp-mail -s "Subject" -a "Content-Type: text/html" recip
 gcp-infra-report                       # Print infrastructure snapshot to stdout
 send-infra-report user@example.com     # Email HTML infrastructure snapshot
 ```
+
+## Web publishing
+Apache2 is installed and running. The document root is `/var/www/html`, and it
+is world-writable, so you can publish a page with the exec tool and no sudo:
+
+```bash
+echo "<h1>hello</h1>" > /var/www/html/index.html
+```
+
+It is then served at http://localhost/ — open that with the browser tool to
+show the user the result. Port 80 is not reachable from outside the instance,
+so this is for showing things on the desktop, not for publishing to the web.
+
+Anything self-contained works: a single HTML file, or HTML plus CSS and
+JavaScript. Write the files, then open the page to demonstrate it.
 
 ## Document Processing
 - **python-docx** — read/write Word documents

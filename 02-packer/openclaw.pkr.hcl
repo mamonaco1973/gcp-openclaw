@@ -64,12 +64,12 @@ variable "zone" {
 # ================================================================================
 
 source "googlecompute" "openclaw" {
-  project_id          = var.project_id
-  zone                = var.zone
-  source_image_family = "ubuntu-2404-lts-amd64"
+  project_id              = var.project_id
+  zone                    = var.zone
+  source_image_family     = "ubuntu-2404-lts-amd64"
   source_image_project_id = ["ubuntu-os-cloud"]
-  ssh_username        = "ubuntu"
-  machine_type        = "e2-standard-4"
+  ssh_username            = "ubuntu"
+  machine_type            = "e2-standard-4"
 
   image_name   = "openclaw-image-${local.timestamp}"
   image_family = "openclaw-images"
@@ -168,6 +168,12 @@ build {
   # Install GCP cost report and send-cost-report helper scripts.
   provisioner "shell" {
     script          = "./scripts/13-gcp-tools.sh"
+    execute_command = "sudo -E bash '{{.Path}}'"
+  }
+
+  # Install Apache so the agent has somewhere to publish what it builds.
+  provisioner "shell" {
+    script          = "./scripts/14-apache.sh"
     execute_command = "sudo -E bash '{{.Path}}'"
   }
 
