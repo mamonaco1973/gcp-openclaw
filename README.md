@@ -17,10 +17,11 @@ to manage, no keys to rotate.
 
 ![openclaw](openclaw.png)
 
-OpenClaw is backed by two **Vertex AI** Gemini models available for selection at
-runtime: **Gemini 2.5 Flash** and **Gemini 2.5 Pro** — both routed through a
-locally running **LiteLLM proxy** so the agent works with any model without
-configuration changes.
+OpenClaw is backed by a configurable set of **Vertex AI** Gemini models,
+selectable at runtime and all routed through a locally running **LiteLLM
+proxy**. The list lives in one file, [gemini-config.sh](gemini-config.sh), and
+drives the LiteLLM config, the OpenClaw model picker, and the pre-flight checks
+— so adding, removing, or repointing a model is a one-line change.
 
 Outbound **email** is configured automatically at boot using **SMTP credentials**
 retrieved from Secret Manager, giving the agent the ability to send reports,
@@ -34,9 +35,11 @@ notifications, and file attachments without any manual setup.
    and task agent. It can write and execute code, browse the web, manipulate
    files, call GCP APIs, and send email — all driven by natural language
    instructions.
-2. **Vertex AI Model Integration** — Two Gemini models (2.5 Flash and 2.5 Pro)
-   are available via LiteLLM proxy running on loopback. Model selection requires
-   no code changes — switch at any time in the OpenClaw UI.
+2. **Vertex AI Model Integration** — Any number of Gemini models are served
+   through a LiteLLM proxy on loopback, defined once in `gemini-config.sh`.
+   Model IDs expire on Google's schedule, so `probe_vertex.py` reports what
+   your project can actually call and `check_env.sh` refuses to deploy a
+   model that does not answer.
 3. **Fully Automated Provisioning** — A single `apply.sh` command provisions
    the VPC, builds the GCE image with Packer, and deploys the VM with Terraform.
 4. **Zero Credential Management** — The GCE instance authenticates to Vertex AI
@@ -60,8 +63,8 @@ notifications, and file attachments without any manual setup.
 ![gcp-openclaw](gcp-openclaw.png)
 
 The deployment spans three Terraform phases backed by a Packer image build.
-**01-core** establishes the network foundation — a VPC, subnet, Cloud Router,
-NAT gateway, and Secret Manager secrets for credentials and SMTP. **02-packer**
+**01-core** establishes the network foundation — a VPC, subnet, and Secret
+Manager secrets for credentials and SMTP. **02-packer**
 builds the `openclaw-images` family image from a clean Ubuntu 24.04 base,
 installing the full LXQt desktop, developer tooling, and the OpenClaw and
 LiteLLM services. **03-openclaw** launches the GCE instance from that image,
@@ -87,8 +90,10 @@ no access keys ever touch the filesystem.
 | Image family | `openclaw-images` |
 | LiteLLM port | `4000` (loopback) |
 | OpenClaw gateway port | `18789` (loopback) |
-| Primary AI model | `gemini-2.5-flash` (Vertex AI) |
-| Secondary AI model | `gemini-2.5-pro` (Vertex AI) |
+| AI models | Defined in `gemini-config.sh` (3 by default) |
+| Default primary | `gemini-primary` -> `gemini-3.8-flash` |
+| Vertex location | `global` |
+| Web document root | `/var/www/html` (Apache, loopback only) |
 | Linux user | `openclaw` |
 | Password source | Secret Manager `openclaw-credentials` |
 | SMTP credentials | Secret Manager `openclaw-smtp` |
@@ -115,6 +120,41 @@ Run `api_setup.sh` once before deploying to enable all required GCP APIs:
 
 This enables: Compute, Resource Manager, Secret Manager, Vertex AI, Cloud
 Billing, and Storage APIs.
+
+### Choosing Models
+
+Gemini model IDs retire on a published schedule, and the Vertex catalog lists
+models a given project cannot actually call — those return 404 or 403 rather
+than appearing unavailable. The only reliable test is to make the call.
+
+`probe_vertex.py` does exactly that: it asks Vertex which models it serves,
+sends each one a real request, and ranks whatever answers by response time.
+
+```bash
+./probe_vertex.py                        # everything this project can serve
+./probe_vertex.py --check gemini-3.8-flash   # verify one id, exit code only
+```
+
+Put the winners in `gemini-config.sh`:
+
+```bash
+GEMINI_MODELS=(
+  "gemini-primary|gemini-3.8-flash|Gemini 3.8 Flash (Vertex)"
+  "gemini-fast|gemini-3.5-flash|Gemini 3.5 Flash (Vertex)"
+  "gemini-lite|gemini-3.1-flash-lite|Gemini 3.1 Flash-Lite (Vertex)"
+)
+
+GEMINI_PRIMARY="gemini-primary"     # agents default to this
+```
+
+The alias on the left is what LiteLLM routes on and what OpenClaw stores. It
+stays stable while the Vertex ID on the right expires, so a model bump does not
+repoint existing agents. `check_env.sh` probes every ID in the list before any
+resource is created, and fails the deploy if one does not answer.
+
+Note that response time ranks models against each other; it says nothing about
+whether a model can drive a multi-step tool-calling turn. Verify that in the UI
+before trusting a new primary.
 
 ### SMTP Email (Optional)
 
@@ -161,7 +201,7 @@ Run [check_env.sh](check_env.sh) to validate your environment, then run
 `apply.sh` performs the following steps in order:
 
 1. Runs `check_env.sh` to validate required CLI tools and GCP authentication
-2. Deploys `01-core` — VPC, subnet, NAT gateway, Secret Manager secrets
+2. Deploys `01-core` — VPC, subnet, Secret Manager secrets
 3. Runs `packer build` against `02-packer/openclaw.pkr.hcl` to produce the GCE image
 4. Resolves the latest image from the `openclaw-images` family
 5. Deploys `03-openclaw` — GCE instance, firewall rules, service account binding
@@ -185,8 +225,13 @@ When the deployment completes, the following resources are created:
 - **Networking (01-core):**
   - VPC `openclaw-vpc` (custom mode, no auto subnets)
   - Subnet `openclaw-subnet` with CIDR `10.0.0.0/24` in `us-east4`
-  - Cloud Router and Cloud NAT for outbound internet access
   - Secret Manager secrets: `openclaw-credentials`, `openclaw-smtp`
+
+  > Cloud Router and Cloud NAT are present but commented out in
+  > `01-core/networking.tf`. The instance has an external IP for RDP, and a VM
+  > with an external IP egresses through it directly — Cloud NAT only carries
+  > traffic for instances that have none, so it was billing without ever
+  > passing a packet. Uncomment both if you drop the external IP.
 
 - **GCE Image (02-packer):**
   - Ubuntu 24.04 base image built in `us-east4-b`
@@ -199,6 +244,8 @@ When the deployment completes, the following resources are created:
     matplotlib, pymupdf, reportlab, beautifulsoup4, httpx, rich, and more
   - **System utilities** — ffmpeg, imagemagick, pandoc, poppler-utils,
     ghostscript, sqlite3, jq, xmlstarlet, csvkit, msmtp
+  - **Apache2** serving `/var/www/html` on loopback, world-writable so the
+    agent can publish a page with no sudo
   - **OpenClaw config pre-stamped** — gateway metadata written at build time
     so no cold-start config generation on first launch
   - **Exec allowlist pre-configured** — agent can run commands immediately
@@ -212,12 +259,13 @@ When the deployment completes, the following resources are created:
   - **`startup.sh`** runs at first boot:
     1. Reads `openclaw-credentials` from Secret Manager and sets the
        `openclaw` Linux user password
-    2. Writes `/opt/openclaw/litellm-config.yaml` with Vertex AI project ID
-       and model IDs
+    2. Writes `/opt/openclaw/litellm-config.yaml` with the Vertex AI project
+       ID and one entry per model from `gemini-config.sh`
     3. Reads `openclaw-smtp` from Secret Manager and configures msmtp and
        the `gcp-mail` wrapper for outbound email
     4. Restarts `litellm.service` and `openclaw-gateway.service`
-    5. On first boot only: configures the LiteLLM model provider in OpenClaw
+    5. On first boot only: registers the LiteLLM provider and every model
+       with OpenClaw, and sets the primary
 
 - **Systemd Services:**
   - `litellm.service` — LiteLLM proxy, reads `/opt/openclaw/litellm-config.yaml`
@@ -241,6 +289,9 @@ Password: (retrieved below)
 
 ### Getting the Password
 
+`validate.sh` prints it alongside the IP, so the usual path is just to read its
+output. To fetch it again later:
+
 ```bash
 gcloud secrets versions access latest \
   --secret="openclaw-credentials" | jq -r '.password'
@@ -256,12 +307,17 @@ OpenClaw web interface.
 
 ### Selecting a Model
 
-Click the model selector in the OpenClaw toolbar. Two models are available:
+Click the model selector in the OpenClaw toolbar. Whatever is listed in
+`gemini-config.sh` appears here. The defaults are:
 
 | Model | Best for |
 |---|---|
-| **Gemini 2.5 Flash** | Fast responses, cost-efficient tasks, iteration |
-| **Gemini 2.5 Pro** | Complex reasoning, multi-step coding tasks, analysis |
+| **Gemini 3.8 Flash** | Default. Newest stable Flash — agent and tool work |
+| **Gemini 3.5 Flash** | Fallback if the newest model misbehaves |
+| **Gemini 3.1 Flash-Lite** | Cheapest and quickest for short, simple turns |
+
+There is currently no stable Pro model in the 3.x line — only a preview — so
+the primary is the newest stable Flash rather than a Pro.
 
 ### Agent Capabilities
 
@@ -274,9 +330,105 @@ OpenClaw's `main` agent has full access to:
 | **Browser** | Open URLs, extract page content, take screenshots via headless Chrome |
 | **Email** | Send plain text and HTML email via `gcp-mail` (msmtp + SMTP) |
 | **GCP APIs** | Full access via the VM service account — no credentials needed |
+| **Web** | Publish to `/var/www/html`, served by Apache at `http://localhost/` |
 
 The agent's workspace is at `~/.openclaw/workspace`. A `SYSTEM.md` file in the
 workspace describes all available tools, commands, and capabilities.
+
+Full post-deploy walkthrough, including the tool-calling check you should run
+before trusting the deploy, is in [configure.md](configure.md).
+
+---
+
+## Example Prompts
+
+Apache serves `/var/www/html` at `http://localhost/`, and the directory is
+world-writable, so the agent can publish a page with the exec tool and open it
+in Chrome without leaving the desktop. Nothing is exposed outside the instance.
+
+**Be specific.** A bare *"build breakout"* produces something threadbare no
+matter which model is driving. The prompts below spell out the tool, the path,
+the permission, and every feature — each line kills a specific failure mode:
+
+- **Naming `/var/www/html` and its permissions** stops it asking you to create
+  the file.
+- **"Do not print the code in chat"** pushes it toward an actual tool call.
+  Left out, some models narrate `[exec command="..."]` as text and nothing runs.
+- **Enumerating features** does the design work. Left open, you get a paddle
+  and a ball and no lives, win state, or restart.
+- **The closing `curl` check** makes the agent prove the page really serves
+  rather than claiming success.
+
+### Breakout
+
+```
+Build a complete Breakout game as a single self-contained HTML file.
+
+You have full write permission to /var/www/html - it is world-writable and
+served by Apache at http://localhost/. Use the exec tool to write the file
+directly. Do not ask me for permission and do not print the code in chat.
+
+Write it to: /var/www/html/breakout.html
+
+Requirements:
+- One file only. Inline CSS and inline JavaScript. No external libraries,
+  no CDN links, no separate .js or .css files.
+- 800x600 <canvas>, centred on a dark page background.
+- Paddle at the bottom, controlled by BOTH the mouse and the left/right
+  arrow keys. Clamp it to the canvas edges.
+- A ball that bounces off the walls, the paddle, and the bricks. Angle the
+  bounce based on where the ball hits the paddle.
+- 5 rows x 10 columns of bricks, a different colour per row.
+- Score (+10 per brick) and 3 lives, both drawn on the canvas.
+- Losing the ball costs a life and resets the ball on the paddle.
+- "YOU WIN" when every brick is cleared, "GAME OVER" at zero lives, and in
+  both cases press SPACE to restart.
+- Use requestAnimationFrame for the game loop.
+
+When the file is written, verify it with exec:
+  ls -l /var/www/html/breakout.html
+  curl -s -o /dev/null -w "%{http_code}" http://localhost/breakout.html
+
+Then tell me the URL to open. Do not stop until the file exists and the
+curl returns 200.
+```
+
+### Tetris
+
+```
+Build a complete Tetris game as a single self-contained HTML file.
+
+You have full write permission to /var/www/html - it is world-writable and
+served by Apache at http://localhost/. Use the exec tool to write the file
+directly. Do not ask me for permission and do not print the code in chat.
+
+Write it to: /var/www/html/tetris.html
+
+Requirements:
+- One file only. Inline CSS and inline JavaScript. No external libraries,
+  no CDN links, no separate .js or .css files.
+- A 10-wide by 20-tall playfield drawn on a <canvas>, centred on a dark page
+  background, with a visible grid.
+- All 7 tetrominoes (I, O, T, S, Z, J, L) in the standard colours: cyan,
+  yellow, purple, green, red, blue, orange.
+- Controls: left/right arrows move, up arrow rotates clockwise, down arrow
+  soft-drops, SPACE hard-drops. Block any move or rotation that would leave
+  the playfield or overlap a locked block.
+- Pieces lock when they cannot fall further, then a new piece spawns at the
+  top from a random bag of the 7.
+- Clear full lines, shift everything above down, and score 100/300/500/800
+  for 1/2/3/4 lines at once.
+- Show score, level, and lines cleared beside the board, plus a "next piece"
+  preview. Level rises every 10 lines and the drop speed increases with it.
+- "GAME OVER" when a new piece cannot spawn, with SPACE to restart.
+
+When the file is written, verify it with exec:
+  ls -l /var/www/html/tetris.html
+  curl -s -o /dev/null -w "%{http_code}" http://localhost/tetris.html
+
+Then tell me the URL to open. Do not stop until the file exists and the
+curl returns 200.
+```
 
 ---
 
@@ -344,3 +496,4 @@ The GCE image is built from Ubuntu 24.04 using the following scripts in order:
 | `11-python-tools.sh` | Python packages and system utilities for agent use |
 | `12-onlyoffice.sh` | OnlyOffice Desktop Editors |
 | `13-gcp-tools.sh` | `gcp-infra-report` and `send-infra-report` helper scripts |
+| `14-apache.sh` | Apache2 serving a world-writable `/var/www/html` on loopback |
