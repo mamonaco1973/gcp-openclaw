@@ -32,6 +32,22 @@ echo "NOTE: [credentials] done"
 
 echo "NOTE: [litellm] writing config"
 cat > /opt/openclaw/litellm-config.yaml <<LITELLM
+# reasoning_effort: disable is on every model and MUST NOT be removed.
+#
+# Gemini 3 models attach a thought_signature to tool-call parts, which has to
+# be echoed back byte-for-byte on the next turn. OpenClaw talks to LiteLLM over
+# the Responses API, and that bridge runs the signature through tool-call-ID
+# shortening: truncated to 30 characters with a hash appended. Vertex then
+# rejects the SECOND tool turn with
+#   Invalid value at 'contents[N].parts[1].thought_signature' (TYPE_BYTES),
+#   Base64 decoding failed
+# The first tool call always succeeds, so it presents as a model or prompt
+# problem rather than a transport one. Setting api: openai-chat does not help;
+# OpenClaw uses the Responses API regardless.
+#
+# Disabling thinking means no signature is ever produced, sidestepping the bug
+# entirely. The cost is Gemini's reasoning step. Remove it only after
+# confirming a multi-turn tool conversation survives without it.
 model_list:
 %{ for m in models ~}
   - model_name: ${m.alias}
@@ -39,8 +55,16 @@ model_list:
       model: vertex_ai/${m.model}
       vertex_project: ${project_id}
       vertex_location: ${vertex_location}
-
+      reasoning_effort: disable   # see note above -- do not remove
 %{ endfor ~}
+
+# drop_params belongs here, NOT in general_settings, which is where it used to
+# be and where LiteLLM never read it. OpenClaw sends OpenAI parameters that
+# some Vertex models reject outright; without this a request carrying an
+# unsupported field fails instead of being trimmed.
+litellm_settings:
+  drop_params: true
+
 general_settings:
   master_key: "sk-openclaw"
   drop_params: true
@@ -160,10 +184,15 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
 
   # The model list is decoded from base64 rather than interpolated as JSON: a
   # display name containing an apostrophe would otherwise break out of the
-  # single-quoted shell string. jq splices it in as structured data, and the
-  # api field is stamped on every entry here so it cannot drift per model.
-  MODELS_JSON=$(echo '${models_b64}' | base64 -d \
-    | jq -c '[.[] | . + {api: "openai-responses"}]')
+  # single-quoted shell string.
+  #
+  # No "api" field is set, matching oci-openclaw and aws-openclaw. It used to
+  # say api: "openai-responses", which was redundant: OpenClaw uses the
+  # Responses API by default, so setting it changed nothing. Removing it does
+  # NOT move requests to chat completions -- verified on a live host, they
+  # still go to POST /responses. The thought_signature problem that transport
+  # causes is worked around in the LiteLLM config above, not here.
+  MODELS_JSON=$(echo '${models_b64}' | base64 -d | jq -c '.')
   PRIMARY_ALIAS='${primary_alias}'
 
   PROVIDER_JSON=$(jq -n --argjson models "$${MODELS_JSON}" '{

@@ -134,6 +134,34 @@ Runs at first boot from instance metadata (NOT baked into the image, so a
    LiteLLM provider and every model with OpenClaw, sets the primary, adds the
    exec allowlist, and restarts the gateway
 
+### Gotcha: Gemini 3 thought signatures
+
+`reasoning_effort: disable` is set on every model in the rendered LiteLLM
+config. **Do not remove it.**
+
+Gemini 3 attaches a `thought_signature` to tool-call parts that must be echoed
+back byte-for-byte on the following turn. OpenClaw talks to LiteLLM over the
+Responses API, and that bridge runs the signature through tool-call-ID
+shortening — truncated to 30 characters with `_<10 hex>` appended. Vertex
+rejects the **second** tool turn:
+
+```
+Invalid value at 'contents[5].parts[1].thought_signature' (TYPE_BYTES),
+Base64 decoding failed for "AY89a18FPv7xX9mLUNs8iOTLhUwPPp_b6be96db03"
+```
+
+The first tool call always succeeds, so it looks like a model or prompt
+problem. It is neither — it reproduces on every Gemini 3 model tested, and the
+corruption is deterministic (always 30 chars + underscore + 10 hex).
+
+Things that do **not** fix it: removing the `api` field from the provider
+config (OpenClaw uses the Responses API by default either way), starting a new
+conversation (only clears the poisoned history), or switching models.
+
+Disabling thinking means no signature is ever emitted. The cost is Gemini's
+reasoning step. `oci-openclaw` never hit this because its models do not produce
+thought signatures at all.
+
 ### Gotcha: `$$` in the template
 
 `startup.sh` is rendered through `templatefile`, which treats `$$` as an escape

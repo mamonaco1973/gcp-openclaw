@@ -119,8 +119,35 @@ visibly if the model narrates the call instead of making it.
 | Model picker is empty | `sudo -u openclaw env HOME=/home/openclaw openclaw config get models.providers.litellm` — if unset, re-run the registration block |
 | Change the models | Edit `gemini-config.sh`, re-apply `03-openclaw`, then reboot the instance |
 | Agent narrates `[exec ...]` instead of running it | The model is not tool-calling reliably. Switch `GEMINI_PRIMARY` to another alias |
+| "LLM request failed: provider rejected the request schema or tool payload" after the first tool call succeeds | `thought_signature` corruption — see below |
 | Chrome shows an "unsupported flag" banner | The AppArmor userns sysctl did not apply: `sysctl kernel.apparmor_restrict_unprivileged_userns` should be `0` |
 | Agent cannot write to `/var/www/html` | `stat -c '%a' /var/www/html` should be `777` |
+
+### Gemini 3 thought signatures
+
+The agent completes one tool call, then the next turn dies with *"provider
+rejected the request schema or tool payload"*. The real error is in the LiteLLM
+journal:
+
+```
+Invalid value at 'contents[5].parts[1].thought_signature' (TYPE_BYTES),
+Base64 decoding failed for "AY89a18FPv7xX9mLUNs8iOTLhUwPPp_b6be96db03"
+```
+
+Gemini 3 attaches a signature to tool-call parts that must be echoed back
+unchanged. OpenClaw uses the Responses API, and that bridge mangles it into a
+shortened tool-call ID — always 30 characters plus `_<10 hex>`.
+
+The deploy sets `reasoning_effort: disable` on every model to prevent this. If
+you hit it anyway, confirm the setting survived:
+
+```bash
+grep -c "reasoning_effort: disable" /opt/openclaw/litellm-config.yaml
+systemctl restart litellm
+```
+
+Then start a new conversation — an existing one has the bad signature in its
+history and will keep failing regardless of the fix.
 
 ### Changing the model list on a running instance
 
