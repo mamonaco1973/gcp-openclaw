@@ -18,21 +18,20 @@ set -euo pipefail
 #
 # ================================================================================
 
+# Placeholder only: startup.sh rewrites this file at first boot from
+# gemini-config.sh, and vertex_project is not even real here. It exists so
+# LiteLLM will start and the gateway can stamp its config during the build.
+# The ids are still kept off the retiring 2.5 family so nothing in the image
+# advertises a model this project no longer deploys.
 echo "NOTE: [openclaw-init] writing placeholder litellm config"
 mkdir -p /opt/openclaw
 cat > /opt/openclaw/litellm-config.yaml <<'LITELLM'
 model_list:
-  - model_name: gemini-flash
+  - model_name: gemini-primary
     litellm_params:
-      model: vertex_ai/gemini-2.5-flash
+      model: vertex_ai/gemini-3.8-flash
       vertex_project: placeholder
-      vertex_location: us-central1
-
-  - model_name: gemini-pro
-    litellm_params:
-      model: vertex_ai/gemini-2.5-pro
-      vertex_project: placeholder
-      vertex_location: us-central1
+      vertex_location: global
 
 general_settings:
   master_key: "sk-openclaw"

@@ -7,7 +7,7 @@
 #   Deploy the OpenClaw AI Agent Workstation on GCP.
 #
 # Deployment Flow:
-#     1. Deploy core infrastructure (Terraform: VPC, NAT, Secret Manager).
+#     1. Deploy core infrastructure (Terraform: VPC, Secret Manager).
 #     2. Build OpenClaw GCE image (Packer).
 #     3. Deploy OpenClaw VM (Terraform).
 #     4. Validate deployment.
@@ -30,6 +30,12 @@ echo "NOTE: Running environment validation..."
 
 export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
 project_id=$(jq -r '.project_id' "./credentials.json")
+
+# Hand the model list to Terraform as TF_VAR_*, so the deploy uses exactly the
+# models check_env.sh just probed rather than whatever the variable defaults
+# happen to say.
+source ./gemini-config.sh
+gemini_export_tf_vars
 GCP_ZONE="${GCP_ZONE:-us-east4-b}"
 GCP_REGION="${GCP_REGION:-us-east4}"
 

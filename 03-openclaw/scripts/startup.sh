@@ -33,24 +33,21 @@ echo "NOTE: [credentials] done"
 echo "NOTE: [litellm] writing config"
 cat > /opt/openclaw/litellm-config.yaml <<LITELLM
 model_list:
-  - model_name: gemini-flash
+%{ for m in models ~}
+  - model_name: ${m.alias}
     litellm_params:
-      model: vertex_ai/${primary_model}
+      model: vertex_ai/${m.model}
       vertex_project: ${project_id}
-      vertex_location: us-central1
+      vertex_location: ${vertex_location}
 
-  - model_name: gemini-pro
-    litellm_params:
-      model: vertex_ai/${secondary_model}
-      vertex_project: ${project_id}
-      vertex_location: us-central1
-
+%{ endfor ~}
 general_settings:
   master_key: "sk-openclaw"
   drop_params: true
 LITELLM
 chown openclaw:openclaw /opt/openclaw/litellm-config.yaml
-echo "NOTE: [litellm] config written"
+echo "NOTE: [litellm] config written for these models:"
+grep '^  - model_name:' /opt/openclaw/litellm-config.yaml
 
 
 # ================================================================================
@@ -160,14 +157,36 @@ if [ ! -f "$${FIRST_BOOT_FLAG}" ]; then
   sleep 20
 
   OPENCLAW_BIN=$(which openclaw)
-  sudo -u openclaw env HOME=/home/openclaw PATH="$${PATH}" bash -c "
-    $${OPENCLAW_BIN} config set models.providers.litellm \
-      '{\"baseUrl\":\"http://localhost:4000\",\"apiKey\":\"sk-openclaw\",\"models\":[{\"id\":\"gemini-flash\",\"name\":\"Gemini 2.5 Flash\",\"api\":\"openai-responses\"},{\"id\":\"gemini-pro\",\"name\":\"Gemini 2.5 Pro\",\"api\":\"openai-responses\"}]}' \
-      --strict-json
-    $${OPENCLAW_BIN} config set agents.defaults.model.primary litellm/gemini-pro
-    $${OPENCLAW_BIN} approvals allowlist add --agent '*' '/**'
-    $${OPENCLAW_BIN} approvals allowlist add --agent 'main' '/**'
-  "
+
+  # The model list is decoded from base64 rather than interpolated as JSON: a
+  # display name containing an apostrophe would otherwise break out of the
+  # single-quoted shell string. jq splices it in as structured data, and the
+  # api field is stamped on every entry here so it cannot drift per model.
+  MODELS_JSON=$(echo '${models_b64}' | base64 -d \
+    | jq -c '[.[] | . + {api: "openai-responses"}]')
+  PRIMARY_ALIAS='${primary_alias}'
+
+  PROVIDER_JSON=$(jq -n --argjson models "$${MODELS_JSON}" '{
+    baseUrl: "http://localhost:4000",
+    apiKey:  "sk-openclaw",
+    models:  $models
+  }')
+
+  run_openclaw() {
+    sudo -u openclaw env HOME=/home/openclaw PATH="$${PATH}" \
+      "$${OPENCLAW_BIN}" "$$@"
+  }
+
+  if ! run_openclaw config set models.providers.litellm \
+       "$${PROVIDER_JSON}" --strict-json; then
+    echo "ERROR: [openclaw] failed to register the litellm provider - the"
+    echo "ERROR: [openclaw] model picker will show whatever was baked in."
+  fi
+
+  run_openclaw config set agents.defaults.model.primary \
+    "litellm/$${PRIMARY_ALIAS}"
+  run_openclaw approvals allowlist add --agent '*' '/**'
+  run_openclaw approvals allowlist add --agent 'main' '/**'
 
   echo "NOTE: [openclaw] restarting gateway to apply model config"
   systemctl restart openclaw-gateway
