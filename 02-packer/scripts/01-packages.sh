@@ -20,6 +20,7 @@ echo "NOTE: [packages] installing base packages"
 apt-get update -y
 apt-get install -y \
   curl \
+  libnotify-bin \
   ca-certificates \
   jq \
   unzip \
