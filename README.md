@@ -91,7 +91,7 @@ no access keys ever touch the filesystem.
 | LiteLLM port | `4000` (loopback) |
 | OpenClaw gateway port | `18789` (loopback) |
 | AI models | Defined in `gemini-config.sh` (3 by default) |
-| Default primary | `gemini-primary` -> `gemini-3.8-flash` |
+| Default primary | `gemini-primary` -> `gemini-3.5-flash` |
 | Vertex location | `global` |
 | Web document root | `/var/www/html` (Apache, loopback only) |
 | Linux user | `openclaw` |
@@ -132,15 +132,15 @@ sends each one a real request, and ranks whatever answers by response time.
 
 ```bash
 ./probe_vertex.py                        # everything this project can serve
-./probe_vertex.py --check gemini-3.8-flash   # verify one id, exit code only
+./probe_vertex.py --check gemini-3.5-flash   # verify one id, exit code only
 ```
 
 Put the winners in `gemini-config.sh`:
 
 ```bash
 GEMINI_MODELS=(
-  "gemini-primary|gemini-3.8-flash|Gemini 3.8 Flash (Vertex)"
-  "gemini-fast|gemini-3.5-flash|Gemini 3.5 Flash (Vertex)"
+  "gemini-primary|gemini-3.5-flash|Gemini 3.5 Flash (Vertex)"
+  "gemini-fast|gemini-3.5-flash-lite|Gemini 3.5 Flash-Lite (Vertex)"
   "gemini-lite|gemini-3.1-flash-lite|Gemini 3.1 Flash-Lite (Vertex)"
 )
 
@@ -312,12 +312,17 @@ Click the model selector in the OpenClaw toolbar. Whatever is listed in
 
 | Model | Best for |
 |---|---|
-| **Gemini 3.8 Flash** | Default. Newest stable Flash — agent and tool work |
-| **Gemini 3.5 Flash** | Fallback if the newest model misbehaves |
+| **Gemini 3.5 Flash** | Default. Verified to drive multi-step tool calls |
+| **Gemini 3.5 Flash-Lite** | Lighter alternative in the same family |
 | **Gemini 3.1 Flash-Lite** | Cheapest and quickest for short, simple turns |
 
-There is currently no stable Pro model in the 3.x line — only a preview — so
-the primary is the newest stable Flash rather than a Pro.
+There is no stable Pro model in the 3.x line — only a preview — so the primary
+is a Flash model.
+
+`gemini-3.8-flash` is deliberately absent despite being newer. It ignores
+`reasoning_effort: disable`, so it keeps emitting the thought signature that
+breaks multi-turn tool calls through LiteLLM. See
+[configure.md](configure.md).
 
 ### Agent Capabilities
 

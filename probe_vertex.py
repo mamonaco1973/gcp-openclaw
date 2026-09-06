@@ -23,7 +23,7 @@ Usage
     python3 probe_vertex.py flash               # only ids matching a filter
     python3 probe_vertex.py --tokens 800        # realistic generation length
     python3 probe_vertex.py --location us-central1
-    python3 probe_vertex.py --check gemini-3.8-flash
+    python3 probe_vertex.py --check gemini-3.5-flash
 
     --check verifies one exact id and communicates through the exit code, so a
     shell pre-flight can gate a deploy on it -- the same contract

@@ -29,7 +29,7 @@ cat > /opt/openclaw/litellm-config.yaml <<'LITELLM'
 model_list:
   - model_name: gemini-primary
     litellm_params:
-      model: vertex_ai/gemini-3.8-flash
+      model: vertex_ai/gemini-3.5-flash
       vertex_project: placeholder
       vertex_location: global
 

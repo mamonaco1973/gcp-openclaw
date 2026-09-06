@@ -138,8 +138,16 @@ Gemini 3 attaches a signature to tool-call parts that must be echoed back
 unchanged. OpenClaw uses the Responses API, and that bridge mangles it into a
 shortened tool-call ID — always 30 characters plus `_<10 hex>`.
 
-The deploy sets `reasoning_effort: disable` on every model to prevent this. If
-you hit it anyway, confirm the setting survived:
+The deploy sets `reasoning_effort: disable` on every model to prevent this.
+That works for 3.5 and 3.1, which stop emitting signatures.
+
+**It does not work for `gemini-3.8-flash`**, which ignores the setting and
+thinks anyway — so it fails on the second tool call no matter what. It is
+excluded from `gemini-config.sh` for that reason. If you add a newer model and
+see this error, that model is likely doing the same thing; test it with a
+two-step tool task before making it the primary.
+
+If you hit this on a model that should be fine, confirm the setting survived:
 
 ```bash
 grep -c "reasoning_effort: disable" /opt/openclaw/litellm-config.yaml

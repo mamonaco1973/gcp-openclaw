@@ -67,14 +67,17 @@ variable "models" {
 
   default = [
     {
-      alias   = "gemini-primary"
-      model   = "gemini-3.8-flash"
-      display = "Gemini 3.8 Flash (Vertex)"
+      alias = "gemini-primary"
+
+      # NOT gemini-3.8-flash: it ignores reasoning_effort: disable, so it keeps
+      # emitting the thought_signature LiteLLM corrupts. See gemini-config.sh.
+      model   = "gemini-3.5-flash"
+      display = "Gemini 3.5 Flash (Vertex)"
     },
     {
       alias   = "gemini-fast"
-      model   = "gemini-3.5-flash"
-      display = "Gemini 3.5 Flash (Vertex)"
+      model   = "gemini-3.5-flash-lite"
+      display = "Gemini 3.5 Flash-Lite (Vertex)"
     },
     {
       alias   = "gemini-lite"

@@ -24,11 +24,12 @@
 # follows it. Moving before the deadline beats moving during an outage. The
 # same change was made in gcp-resume-app.
 #
-# Note there is no stable Pro in 3.x -- only gemini-3.1-pro-preview. The
-# primary is therefore the newest stable Flash. Latency alone did not decide
-# it: a 16-token probe measures time to first token, not whether a model can
-# actually drive the Exec tool through a multi-step agent turn. Verify tool
-# calling in the UI before trusting a new primary.
+# Note there is no stable Pro in 3.x -- only gemini-3.1-pro-preview.
+#
+# The primary is NOT simply the newest model. Latency ranks models against each
+# other but says nothing about whether one can drive the Exec tool through a
+# multi-step agent turn, and the newest Flash could not: see the exclusion
+# note below. Always verify tool calling in the UI before changing the primary.
 #
 # ------------------------------------------------------------------------------
 # Model ids are NOT guaranteed to resolve
@@ -40,7 +41,7 @@
 #
 # To see what your project can actually serve, and how fast:
 #     ./probe_vertex.py
-#     ./probe_vertex.py --check gemini-3.8-flash
+#     ./probe_vertex.py --check gemini-3.5-flash
 #
 # ------------------------------------------------------------------------------
 # Format
@@ -64,9 +65,14 @@
 #   *-preview         can vanish with no retirement notice (this is why the
 #                     only 3.x Pro, gemini-3.1-pro-preview, is not here)
 #   gemini-2.5-*      retiring from 2026-10-16
+#   gemini-3.8-flash  EXCLUDED. It ignores reasoning_effort: disable and
+#                     thinks anyway, so it still emits the thought_signature
+#                     that LiteLLM corrupts -- every multi-turn tool
+#                     conversation dies on the second tool call. 3.5 and 3.1
+#                     honour the setting and work. Verified 2026-09-06.
 GEMINI_MODELS=(
-  "gemini-primary|gemini-3.8-flash|Gemini 3.8 Flash (Vertex)"
-  "gemini-fast|gemini-3.5-flash|Gemini 3.5 Flash (Vertex)"
+  "gemini-primary|gemini-3.5-flash|Gemini 3.5 Flash (Vertex)"
+  "gemini-fast|gemini-3.5-flash-lite|Gemini 3.5 Flash-Lite (Vertex)"
   "gemini-lite|gemini-3.1-flash-lite|Gemini 3.1 Flash-Lite (Vertex)"
 )
 
