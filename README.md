@@ -60,22 +60,33 @@ notifications, and file attachments without any manual setup.
 
 ## Architecture
 
-![gcp-openclaw](gcp-openclaw.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
+  <img alt="A user connects over RDP on port 3389 to openclaw-host, an e2-standard-4 VM in us-east4-b booted from the Packer-built openclaw-images image (Ubuntu 24.04 with an LXQt desktop and XRDP). At first boot startup.sh reads the openclaw user's password and the SMTP credentials from Secret Manager. On the desktop, the user opens the OpenClaw gateway at localhost:18789 in Chrome; it sends prompts to a LiteLLM proxy on localhost:4000, which calls Gemini models on Vertex AI using the VM's service account." src="architecture-light.svg">
+</picture>
+
+Regenerate with `python3 make_diagram.py`. Email goes out through the SMTP
+server in `openclaw-smtp`; that path is left off the diagram.
 
 The deployment spans three Terraform phases backed by a Packer image build.
-**01-core** establishes the network foundation — a VPC, subnet, and Secret
-Manager secrets for credentials and SMTP. **02-packer**
+**01-core** establishes the network foundation — a VPC, subnet, and the
+Secret Manager secret for SMTP. **02-packer**
 builds the `openclaw-images` family image from a clean Ubuntu 24.04 base,
 installing the full LXQt desktop, developer tooling, and the OpenClaw and
 LiteLLM services. **03-openclaw** launches the GCE instance from that image,
 attaches the service account for credential-free access to Vertex AI and Secret
-Manager, and runs `startup.sh` at first boot to wire everything together.
+Manager, stores the generated `openclaw` password in Secret Manager, and runs
+`startup.sh` at first boot to wire everything together.
 
 At runtime, the user connects via RDP to the LXQt desktop and opens OpenClaw
 in Chrome. Prompts flow from the OpenClaw gateway to the LiteLLM proxy running
 on loopback, which routes model requests to Vertex AI — keeping all inference
 traffic within GCP. The service account handles authentication throughout, so
 no access keys ever touch the filesystem.
+
+The VM runs as the service account in `credentials.json` (the one that
+deployed it) with the `cloud-platform` scope, so the agent can do anything
+that account can do in the project. RDP is open to `0.0.0.0/0`.
 
 ## Key Resources
 
@@ -225,7 +236,8 @@ When the deployment completes, the following resources are created:
 - **Networking (01-core):**
   - VPC `openclaw-vpc` (custom mode, no auto subnets)
   - Subnet `openclaw-subnet` with CIDR `10.0.0.0/24` in `us-east4`
-  - Secret Manager secrets: `openclaw-credentials`, `openclaw-smtp`
+  - Secret Manager secret `openclaw-smtp` (`openclaw-credentials` is created
+    in 03-openclaw with the generated password)
 
   > Cloud Router and Cloud NAT are present but commented out in
   > `01-core/networking.tf`. The instance has an external IP for RDP, and a VM
